@@ -2,7 +2,7 @@ import os
 import sys
 import time
 
-from PIL import Image
+from PIL import Image, ImageFilter
 import pytesseract
 import subprocess
 from datetime import datetime, timedelta
@@ -76,8 +76,16 @@ class fudai_analyse:
             text = pytesseract.image_to_string(img, lang='chi_sim')
         # text = pytesseract.image_to_string(img, lang='eng+chi_sim')
         else:
+            # img = img.resize((img.width * 2, img.height * 2))  # 调整大小
+            # new_size = (img.width * 2, img.height * 2)
+            # img = img.resize(new_size, Image.LANCZOS)
+            # 降噪处理
+            img = img.filter(ImageFilter.MedianFilter(size=3)) #MedianFilter 将每个像素的值替换为其周围像素值的中值，以减少图像中的噪声。
+            # 在这里，size=3 表示滤波器的尺寸为 3x3，即在每个像素周围取一个 3x3 的区域进行中值计算。
+            # img.show()
             text = pytesseract.image_to_string(img, lang='eng')
         if type == 2:
+            # print(text)
             # text = ''.join([char for char in text if char.isnumeric() or char == ':'])  #针对时间去噪
             text = ''.join([char for char in text if char.isnumeric()])  # 针对时间去噪
         reformatted_text = text.replace(' ', '').replace('\n', '')
@@ -97,6 +105,8 @@ class fudai_analyse:
             # 转换为总秒数
             total_seconds = minutes * 60 + seconds
             print("剩余总秒数：", total_seconds)
+            if total_seconds > 900: #如果识别到的分钟大于15，说明识别异常了，按15分钟处理
+                total_seconds = 890
             # datetime.strptime(in_time, '%H:%M')
             # time_obj = datetime.strptime(in_time, '%H:%M')
             # print("转换后的时间格式：", time_obj)
@@ -142,14 +152,15 @@ class fudai_analyse:
     def test(self):
         # self.get_screenshot()
         # self.cut_pic((405, 1300), (1000, 1480))  # 福袋内容详情
-        # self.cut_pic((410, 1200), (553, 1270))  # 福袋详情倒计时
-
+        # self.cut_pic((390, 1190), (690, 1280), False, 'fudai_countdown')  # 完整福袋详情倒计时
+        # attend_button_text = self.analyse_pic_word('fudai_countdown', 2)
+        # print(attend_button_text)
         # self.cut_pic((306, 2040 - self.y_pianyi), (780, 2110 - self.y_pianyi))  # 参与福袋抽奖的文字
-        self.cut_pic((306, 1290 - self.y_pianyi), (780, 1410 - self.y_pianyi))  # 立即领取奖品
+        # self.cut_pic((306, 1290 - self.y_pianyi), (780, 1410 - self.y_pianyi))  # 立即领取奖品
+        self.cut_pic((357, 674 ), (740, 750 ))  # 没有抽中福袋位置
         attend_button_text = self.analyse_pic_word('', 1)
         print(attend_button_text)
         # text = self.analyse_pic_word('fudai_countdown', 2)
-        os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
 
     def fudai_choujiang(self, needswitch= False):
         """默认不切换直播间"""
@@ -189,12 +200,12 @@ class fudai_analyse:
             if self.check_detail_height():  #如果是2个任务的
                 self.cut_pic((405, 1240+self.y_pianyi), (1000, 1410+self.y_pianyi), False, 'fudai_content')  # 福袋内容详情
                 # self.cut_pic((414, 1140), (466, 1185), False, 'fudai_countdown1')  # 福袋详情倒计时1
-                self.cut_pic((397, 1130), (690, 1206), False, 'fudai_countdown')  # 完整福袋详情倒计时
+                self.cut_pic((397, 1120), (690, 1210), False, 'fudai_countdown')  # 完整福袋详情倒计时
                 # self.cut_pic((499, 1140), (550, 1185), False, 'fudai_countdown2')  # 福袋详情倒计时2
             else:
                 self.cut_pic((405, 1300+self.y_pianyi), (1000, 1470+self.y_pianyi), False, 'fudai_content')  # 福袋内容详情
                 # self.cut_pic((414, 1200), (466, 1270), False, 'fudai_countdown1')  # 福袋详情倒计时1
-                self.cut_pic((397, 1200), (690, 1266), False, 'fudai_countdown')  # 完整福袋详情倒计时
+                self.cut_pic((390, 1190), (690, 1280), False, 'fudai_countdown')  # 完整福袋详情倒计时
                 # self.cut_pic((499, 1200), (550, 1270), False, 'fudai_countdown2')  # 福袋详情倒计时2
             fudai_content_text = self.analyse_pic_word('fudai_content', 1)
             time_text = self.analyse_pic_word('fudai_countdown', 2)
@@ -208,8 +219,8 @@ class fudai_analyse:
             else:
                 os.system("adb -s %s shell input keyevent 4" % self.device_id)
                 continue
-            self.cut_pic((306, 2030), (780, 2110))  # 参与福袋抽奖的文字
-            attend_button_text = self.analyse_pic_word('', 1)
+            self.cut_pic((306, 2030), (780, 2110), False, "attend_button")  # 参与福袋抽奖的文字
+            attend_button_text = self.analyse_pic_word('attend_button', 1)
             print("参与抽奖按钮文字内容：{}".format(attend_button_text))
             if "参与成功" not in attend_button_text:  #如果识别到没有参与抽奖
                 if needswitch:
@@ -235,15 +246,15 @@ class fudai_analyse:
                 os.system("adb -s %s shell input keyevent 4" % self.device_id)
                 time.sleep(lastsecond)
             self.get_screenshot()
-            self.cut_pic((357, 674+self.y_pianyi), (740, 750+self.y_pianyi)) #没有抽中福袋位置
-            choujiang_result = self.analyse_pic_word('', 1)
+            self.cut_pic((357, 674), (740, 750), False, "choujiang_result")  # 没有抽中福袋位置
+            choujiang_result = self.analyse_pic_word('choujiang_result', 1)
             if "没有抽中" in choujiang_result:
                 os.system("adb -s %s shell input tap 540 1380" % self.device_id)  # 点击我知道了
                 print("没有抽中，点击:我知道了,关闭弹窗")
                 time.sleep(30)
-            else:  #没弹出没有抽中，可能是直播间关闭，可能是中奖了
-                self.cut_pic((306, 1290 - self.y_pianyi), (780, 1410 - self.y_pianyi))  # 立即领取奖品
-                choujiang_result = self.analyse_pic_word('', 1)
+            else:  # 没弹出没有抽中，可能是直播间关闭，可能是中奖了
+                self.cut_pic((306, 1290), (780, 1410), False, "get_reward")  # 立即领取奖品
+                choujiang_result = self.analyse_pic_word('get_reward', 1)
                 if "领取" in choujiang_result:
                     self.save_reward_pic()
                     os.system("adb -s %s shell input tap 243 1495" % self.device_id)
