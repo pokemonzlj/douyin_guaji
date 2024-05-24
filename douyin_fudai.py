@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-
+import re
 from PIL import Image, ImageFilter
 import pytesseract
 import subprocess
@@ -10,9 +10,12 @@ from datetime import datetime, timedelta
 
 class fudai_analyse:
     """目前功能暂时只支持24小时挂机某一个直播间，除非直播间2分钟内无福袋或者直播关闭"""
-    def __init__(self, device='PBB6ZLEYKZONV86H', y_pianyi=0):
-        self.device_id = device
-        self.y_pianyi = y_pianyi
+    def __init__(self):
+        self.device_id = ''
+        self.y_pianyi = 0   # 应用于不同型号手机，弹窗的高度位置有偏差
+    # def __init__(self, device='', y_pianyi=0):
+    #     self.device_id = device
+    #     self.y_pianyi = y_pianyi   # 应用于不同型号手机，弹窗的高度位置有偏差
 
     def get_screenshot(self, path='pic'):
         if path == 'pic':
@@ -149,48 +152,95 @@ class fudai_analyse:
                 return x
         return False
 
-    def test(self):
-        # self.get_screenshot()
-        # self.cut_pic((405, 1300), (1000, 1480))  # 福袋内容详情
-        # self.cut_pic((390, 1190), (690, 1280), False, 'fudai_countdown')  # 完整福袋详情倒计时
-        # attend_button_text = self.analyse_pic_word('fudai_countdown', 2)
-        # print(attend_button_text)
-        # self.cut_pic((306, 2040 - self.y_pianyi), (780, 2110 - self.y_pianyi))  # 参与福袋抽奖的文字
-        # self.cut_pic((306, 1290 - self.y_pianyi), (780, 1410 - self.y_pianyi))  # 立即领取奖品
-        self.cut_pic((357, 674 ), (740, 750 ))  # 没有抽中福袋位置
-        attend_button_text = self.analyse_pic_word('', 1)
-        print(attend_button_text)
-        # text = self.analyse_pic_word('fudai_countdown', 2)
+    def reflash_zhibo(self):
+        """在关注列表，下拉刷新直播间"""
+        print("下划刷新直播间列表")
+        os.system("adb -s %s shell input swipe 760 800 760 1600 200" % (self.device_id))
+        time.sleep(5)
 
-    def fudai_choujiang(self, needswitch= False):
+    def check_zhibo_list(self):
+        """检查直播列表是否存在直播的内容"""
+        self.get_screenshot()
+        path = os.path.dirname(__file__) + '/pic'
+        pic1_path = path + '/screenshot.png'
+        pic = Image.open(pic1_path)
+        # pic_new = Image.open(cut_pic_path)
+        pic_new = pic.convert('RGBA')
+        pix = pic_new.load()
+        if pix[290, 490][0] == 255 and pix[290, 490][1] == 255 and pix[290, 490][2] == 255:
+            print('直播间列表为空')
+            return False
+        return True
+
+    def select_device(self):
+        """选择需要连接的设备"""
+        string = subprocess.Popen('adb devices', shell=True, stdout=subprocess.PIPE)
+        totalstring = string.stdout.read()
+        totalstring = totalstring.decode('utf-8')
+        # print(totalstring)
+        devicelist = re.compile(r'(\w*)\s*device\b').findall(totalstring)
+        devicenum = len(devicelist)
+        if devicenum == 0:
+            print("当前无设备连接电脑!")
+            return False
+        elif devicenum == 1:
+            print("当前有一台设备连接，编号:%s." % devicelist[0])
+            return devicelist[0]
+        else:
+            print("当前存在多台设备连接! 输入数字选择对应设备:")
+            dictdevice = {}
+            for i in range(devicenum):
+                string = subprocess.Popen("adb -s %s shell getprop ro.product.device" % devicelist[i], shell=True,
+                                          stdout=subprocess.PIPE)
+                modestring = string.stdout.read().strip()  # 去除掉自动生成的回车
+                print("%s:%s---%s" % (i + 1, devicelist[i], modestring))
+                dictdevice[i + 1] = devicelist[i]
+            num = input()
+            num = int(num)
+            while not num in dictdevice.keys():
+                print('输入不正确，请重新输入：')
+                num = input()
+                num = int(num)
+            return dictdevice[num]
+
+    def fudai_choujiang(self, device_id="", y_pianyi=0, needswitch=False):
         """默认不切换直播间"""
+        self.device_id = device_id
+        self.y_pianyi = y_pianyi
         wait_times = 0  # 当前直播间的等待次数，累计4次没有福袋，则切换直播间
         swipe_times = 0  # 向上滑动的次数,当超出一定值，改为向下滑动
-        option = 'up'
+        # option = 'up'
         while True:
             self.get_screenshot()
             x = self.check_have_fudai()
             if x:
                 wait_times = 0
                 self.cut_pic((x, 400), (x+90, 455))  # 通常小福袋的位置
-                os.system("adb -s {} shell input tap {} 440".format(self.device_id, x+45)) # 点击默认小福袋的位置
+                os.system("adb -s {} shell input tap {} 440".format(self.device_id, x+45))  # 点击默认小福袋的位置
                 print("点击打开福袋详情")
                 time.sleep(2)
             elif wait_times >= 4:
-                if option == 'up':  #上划状态是up的，就继续上划
+                if swipe_times < 10:  #上划次数不到10次，就继续上划
                     os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
                     print("直播间等待2分钟无福袋，上划切换直播间")
                     swipe_times += 1
-                    if swipe_times >= 10:
-                        option = 'down'
                 else:
-                    os.system("adb -s %s shell input swipe 760 800 760 1600 200" % (self.device_id))
-                    print("直播间等待2分钟无福袋，下划切换回上一个直播间")
-                    swipe_times -= 1
-                    if swipe_times <= 0:
-                        option = 'up'
+                    print("直播间等待2分钟无福袋，退出返回直播列表")
+                    os.system("adb -s %s shell input keyevent 4" % self.device_id)
+                    time.sleep(3)
+                    while True:
+                        self.reflash_zhibo()  # 刷新直播间列表
+                        if self.check_zhibo_list():  # 如果存在直播间
+                            os.system("adb -s %s shell input tap 290 490" % self.device_id)  # 点击第一个直播间
+                            print("点击打开第一个直播间")
+                            time.sleep(5)
+                            swipe_times = 0  # 滑动次数归0
+                            break  # 跳出循环，直播间已找到
+                        else:
+                            time.sleep(600)  # 等待10分钟继续检查
                 wait_times = 0
                 time.sleep(10)
+                continue
             else:
                 print("直播间暂无福袋，等待30S")
                 wait_times += 1
@@ -253,7 +303,7 @@ class fudai_analyse:
                 print("没有抽中，点击:我知道了,关闭弹窗")
                 time.sleep(30)
             else:  # 没弹出没有抽中，可能是直播间关闭，可能是中奖了
-                self.cut_pic((306, 1290), (780, 1410), False, "get_reward")  # 立即领取奖品
+                self.cut_pic((306, 1290-self.y_pianyi), (780, 1410-self.y_pianyi), False, "get_reward")  # 立即领取奖品
                 choujiang_result = self.analyse_pic_word('get_reward', 1)
                 if "领取" in choujiang_result:
                     self.save_reward_pic()
@@ -272,7 +322,7 @@ class fudai_analyse:
 
 
 if __name__ == '__main__':
-    # douyin = fudai_analyse('PBB6ZLEYKZONV86H')
-    douyin = fudai_analyse('66B0220930007938', 26)
-    douyin.fudai_choujiang()
+    # douyin = fudai_analyse()
+    douyin = fudai_analyse()
+    douyin.fudai_choujiang("66B0220930007938", 26)
     # douyin.test()
