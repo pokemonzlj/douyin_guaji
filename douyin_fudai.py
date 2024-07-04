@@ -44,6 +44,10 @@ class fudai_analyse:
     7.增加上划切换到直播间直播间已关闭的判断
     8.兼容福袋参与抽奖的文案为：参与抽奖
 
+    V1.5
+    1.优化设备未识别的处理逻辑
+    2.优化图片文件夹不存在创建文件夹的逻辑
+
     未来更新
     1.获取直播间名字，关联奖品和倒计时，加入判定队列
     2.完全自动处理防沉迷验证
@@ -51,12 +55,12 @@ class fudai_analyse:
     4.增加一定的等待机制，减少被识别为人机的概率
     5.兼容直播提早开奖，直播间关闭的判定
     6.调整一下凌晨检查直播间列表的数量
-    7.修复：没有抽中，点击:我知道了,关闭弹窗的问题
+    7.修复：没有抽中，点击:我知道了,关闭弹窗，弹窗未关闭的问题
     """
 
     def __init__(self):
-        self.device_id = 'XXXXX'
-        self.y_pianyi = 0  # 应用于不同型号手机，弹窗的高度位置有偏差
+        self.device_id = 'XXX'
+        self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
         self.screenshot_dir = os.path.join(os.path.dirname(__file__), 'pic')
 
     def get_screenshot_new(self, path='pic'):
@@ -80,6 +84,8 @@ class fudai_analyse:
             path = os.path.dirname(__file__) + '/pic'
         else:
             path = os.path.dirname(__file__) + '/target_pic'
+        if not os.path.exists(path):
+            os.makedirs(path)
         try:
             subprocess.Popen(
                 'adb  -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % self.device_id).wait()  # -p: save the file as a png
@@ -468,7 +474,7 @@ class fudai_analyse:
                     os.system("adb -s %s shell input tap 290 490" % self.device_id)  # 点击第一个直播间
                     print("点击打开第一个直播间")
                     break  # 跳出循环，直播间已找到
-                elif 2 < current_hour <= 6:
+                elif 3 < current_hour <= 6:
                     print("等待10分钟继续检查")
                     time.sleep(600)  # 等待10分钟继续检查
                 elif self.check_zhibo_list():  # 如果存在直播间
@@ -535,9 +541,9 @@ class fudai_analyse:
 
     def check_contain(self, contains=''):
         """检查福袋内容是否想要"""
-        contains_not_want = ["鱼护", "钓鱼帽", "水壶", "水杯", "线组", "浮漂", "网头", "硬不", "勺", "饵料", "缠把带",
-                             "缠带", "鱼线", "绑钩钳", "诱惑配方", "鱼漂", "黑漂", "子线", "钓箱配件", "鱼饵", "钓鱼桶", "店铺红包", "浮漆"]
-        contains_want = ["加固鱼护", "鱼竿", "钓箱", "钓杆"]
+        contains_not_want = ["鱼护", "钓鱼帽", "水壶", "水杯", "线组", "浮漂", "网头", "硬不", "勺", "饵料", "缠把带", "(旗舰店)随机钓竿一支",
+                             "缠带", "鱼线", "绑钩钳", "诱惑配方", "鱼漂", "黑漂", "子线", "钓箱配件", "鱼饵", "钓鱼桶", "店铺红包", "浮漆", "仕挂"]
+        contains_want = ["加固鱼护", "鱼竿", "钓箱", "钓杆", "鱼漂盒"]
         if self.get_current_hour() < 7:
             return False
         for contain in contains_want:
@@ -638,7 +644,7 @@ class fudai_analyse:
         devicelist = re.compile(r'(\w*)\s*device\b').findall(totalstring)
         devicenum = len(devicelist)
         if devicenum == 0:
-            print("当前无设备连接电脑!")
+            print("当前无设备连接电脑,请检查设备连接情况!")
             return False
         elif devicenum == 1:
             print("当前有一台设备连接，编号:%s." % devicelist[0])
@@ -807,4 +813,4 @@ class fudai_analyse:
 
 if __name__ == '__main__':
     douyin = fudai_analyse()
-    douyin.check_in_follow_list()
+
