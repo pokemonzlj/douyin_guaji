@@ -541,8 +541,7 @@ class fudai_analyse:
 
     def check_contain(self, contains=''):
         """检查福袋内容是否想要"""
-        contains_not_want = ["鱼护", "钓鱼帽", "水壶", "水杯", "线组", "浮漂", "网头", "硬不", "勺", "饵料", "缠把带", "(旗舰店)随机钓竿一支",
-                             "缠带", "鱼线", "绑钩钳", "诱惑配方", "鱼漂", "黑漂", "子线", "钓箱配件", "鱼饵", "钓鱼桶", "店铺红包", "浮漆", "仕挂"]
+        contains_not_want = []
         contains_want = ["加固鱼护", "鱼竿", "钓箱", "钓杆", "鱼漂盒"]
         if self.get_current_hour() < 7:
             return False
