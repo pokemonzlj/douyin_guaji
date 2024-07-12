@@ -6,9 +6,10 @@
 5.根据自己设备的情况，修改douyin_guaji.py文件中y轴的偏移像素，可正可负，我默认设置的Y轴在403，通常区间在【-30,30】  
 本人挂机的手机是1080*2400的像素，即使是相同的分辨率，可能也会因为手机顶部的摄像头布局不一样影响图标的展示  
 ![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/127d1cf5-0814-4edf-846e-b9936e1cb108)
-![image](https://github.com/user-attachments/assets/f494242b-bd57-4969-bd95-eb4c77d8c39e)
 
 通过电脑的画图软件就能看图标的像素位置  
 ![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/bb6ed6fb-84e1-463a-83c7-080c644f212d)
+关于福袋的小图标  
+![image](https://github.com/user-attachments/assets/f494242b-bd57-4969-bd95-eb4c77d8c39e)
 
 
