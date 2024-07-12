@@ -80,25 +80,11 @@ class fudai_analyse:
     """
 
     def __init__(self):
-        self.device_id = 'PBB6ZLEYKZONV86H'
+        self.device_id = '你自己的手机设备号'
         self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
         log_file = open(timepic+'.log', 'w')
         sys.stdout = Tee(sys.stdout, log_file)
-
-    # def get_screenshot_new(self, path='pic'):
-    #     if path != 'pic':
-    #         self.screenshot_dir = os.path.join(os.path.dirname(__file__), 'target_pic')
-    #     # 合并命令到一个shell脚本中，但这里我们仍然分开执行
-    #     screenshot_path = os.path.join(self.screenshot_dir, 'screenshot.png')
-    #     # 捕获截图
-    #     subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'screencap', '-p', '/sdcard/DCIM/screenshot.png'])
-    #     # 拉取截图到本地
-    #     subprocess.check_call(['adb', '-s', self.device_id, 'pull', '/sdcard/DCIM/screenshot.png', screenshot_path])
-    #     # 删除设备上的截图
-    #     subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'rm', '/sdcard/DCIM/screenshot.png'])
-    #     timetag = datetime.now().strftime('%H:%M:%S')
-    #     print("{} 获取屏幕截图".format(timetag))
 
     def get_screenshot(self, path='pic'):
         """截图3个adb命令需要2S左右的时间"""
@@ -588,10 +574,8 @@ class fudai_analyse:
 
     def check_contain(self, contains=''):
         """检查福袋内容是否想要"""
-        contains_not_want = ["鱼护", "钓鱼帽", "水壶", "水杯", "线组", "浮漂", "网头", "硬不", "勺", "缠把带", "SOUTH泛用", "浮漆", "仕挂",
-                             "缠带", "鱼线", "绑钩钳", "诱惑配方", "鱼漂", "黑漂", "子线", "钓箱配件", "鱼饵", "钓鱼桶", "店铺红包", "钻皮"
-                             ,"渔之源-高品质支架", "巨物钓线"]  #, "饵料", "(旗舰店)随机钓竿一支"
-        contains_want = ["加固鱼护", "鱼竿", "钓箱", "钓杆", "鱼漂盒"]  #, "一味鲫饵料"
+        contains_not_want = [] 
+        contains_want = ["鱼竿", "钓箱", "钓杆"]
         if self.get_current_hour() < 7:
             return False
         for contain in contains_want:
