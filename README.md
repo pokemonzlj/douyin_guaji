@@ -8,8 +8,8 @@
 ![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/127d1cf5-0814-4edf-846e-b9936e1cb108)
 
 通过电脑的画图软件就能看图标的像素位置  
-![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/bb6ed6fb-84e1-463a-83c7-080c644f212d)
-关于福袋的小图标  
+![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/bb6ed6fb-84e1-463a-83c7-080c644f212d)  
+关于判定福袋存不存在小图标  
 ![image](https://github.com/user-attachments/assets/f494242b-bd57-4969-bd95-eb4c77d8c39e)
 
 
