@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import re
 from PIL import Image, ImageFilter
@@ -6,6 +7,19 @@ import pytesseract
 import subprocess
 from datetime import datetime, timedelta
 
+class Tee(object):
+    """重写print的函数"""
+    def __init__(self, *files):
+        self.files = files
+
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+            f.flush()
+
+    def flush(self):
+        for f in self.files:
+            f.flush()
 
 class fudai_analyse:
     """
@@ -48,6 +62,12 @@ class fudai_analyse:
     1.优化设备未识别的处理逻辑
     2.优化图片文件夹不存在创建文件夹的逻辑
 
+    V1.6
+    1.增加日志内容同步输出到log文件中，方便问题排查
+    2.增加全局的监控，长时间判定为没有福袋，则重置整个挂机动作
+    3.修复了到凌晨个别直播间提早关闭会导致直播判定卡住的问题
+    4.调整不切换直播间挂机的逻辑，现在会一直等待到直播间关闭才会切换
+
     未来更新
     1.获取直播间名字，关联奖品和倒计时，加入判定队列
     2.完全自动处理防沉迷验证
@@ -56,27 +76,29 @@ class fudai_analyse:
     5.兼容直播提早开奖，直播间关闭的判定
     6.调整一下凌晨检查直播间列表的数量
     7.修复：没有抽中，点击:我知道了,关闭弹窗，弹窗未关闭的问题
+    8.增加点击福袋无法打开，被系统限制参与抽奖的处理逻辑
     """
 
     def __init__(self):
-        self.device_id = 'XXX'
+        self.device_id = 'PBB6ZLEYKZONV86H'
         self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
-        self.screenshot_dir = os.path.join(os.path.dirname(__file__), 'pic')
+        timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
+        log_file = open(timepic+'.log', 'w')
+        sys.stdout = Tee(sys.stdout, log_file)
 
-    def get_screenshot_new(self, path='pic'):
-        if path != 'pic':
-            self.screenshot_dir = os.path.join(os.path.dirname(__file__), 'target_pic')
-        # 合并命令到一个shell脚本中，但这里我们仍然分开执行
-        screenshot_path = os.path.join(self.screenshot_dir, 'screenshot.png')
-        # 捕获截图
-        subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'screencap', '-p', '/sdcard/DCIM/screenshot.png'])
-        # 拉取截图到本地
-        subprocess.check_call(['adb', '-s', self.device_id, 'pull', '/sdcard/DCIM/screenshot.png', screenshot_path])
-        # 删除设备上的截图
-        subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'rm', '/sdcard/DCIM/screenshot.png'])
-
-        timetag = datetime.now().strftime('%H:%M:%S')
-        print("{} 获取屏幕截图".format(timetag))
+    # def get_screenshot_new(self, path='pic'):
+    #     if path != 'pic':
+    #         self.screenshot_dir = os.path.join(os.path.dirname(__file__), 'target_pic')
+    #     # 合并命令到一个shell脚本中，但这里我们仍然分开执行
+    #     screenshot_path = os.path.join(self.screenshot_dir, 'screenshot.png')
+    #     # 捕获截图
+    #     subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'screencap', '-p', '/sdcard/DCIM/screenshot.png'])
+    #     # 拉取截图到本地
+    #     subprocess.check_call(['adb', '-s', self.device_id, 'pull', '/sdcard/DCIM/screenshot.png', screenshot_path])
+    #     # 删除设备上的截图
+    #     subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'rm', '/sdcard/DCIM/screenshot.png'])
+    #     timetag = datetime.now().strftime('%H:%M:%S')
+    #     print("{} 获取屏幕截图".format(timetag))
 
     def get_screenshot(self, path='pic'):
         """截图3个adb命令需要2S左右的时间"""
@@ -158,8 +180,10 @@ class fudai_analyse:
         # img.show() #展示一下处理后的图片
         if os.path.exists('E:/Tesseract-OCR/tesseract.exe'):
             pytesseract.pytesseract.tesseract_cmd = 'E:/Tesseract-OCR/tesseract.exe'
-        else:
+        elif os.path.exists('D:/Tesseract-OCR/tesseract.exe'):
             pytesseract.pytesseract.tesseract_cmd = 'D:/Tesseract-OCR/tesseract.exe'
+        elif os.path.exists('F:/Tesseract-OCR/tesseract.exe'):
+            pytesseract.pytesseract.tesseract_cmd = 'F:/Tesseract-OCR/tesseract.exe'
         if type != 2:
             text = pytesseract.image_to_string(img, lang='chi_sim')
         # text = pytesseract.image_to_string(img, lang='eng+chi_sim')
@@ -428,7 +452,6 @@ class fudai_analyse:
             return True
         return False
 
-
     def check_in_zhibo_list(self):
         """检查是否当前在直播列表"""
         self.cut_pic((400, 145), (675, 230), '', 'zhibo_list_title')  # 福袋内容详情
@@ -451,6 +474,7 @@ class fudai_analyse:
         if "已结束" in zhibo_list_title:
             print("当前直播间已关闭")
             return True
+        print("未判定到当前直播已关闭")
         return False
 
     def check_zhibo_is_closed_guess_whatyoulike(self):
@@ -462,6 +486,21 @@ class fudai_analyse:
             print("当前直播间已关闭")
             return True
         return False
+
+    def back_to_zhibo_list(self):
+        """功能初始化，回到直播间列表"""
+        while True:
+            self.get_screenshot()
+            if self.check_in_zhibo_list():
+                return False
+            elif self.check_in_follow_list():
+                os.system("adb -s %s shell input tap 390 590" % self.device_id)
+                print("点击打开直播间的列表")
+                time.sleep(2)
+                return False
+            os.system("adb -s %s shell input keyevent 4" % self.device_id)
+            print("点击返回")
+            time.sleep(2)
 
     def into_zhibo_from_list(self):
         """从直接列表进入直播间"""
@@ -490,6 +529,14 @@ class fudai_analyse:
                 os.system("adb -s %s shell input keyevent 4" % self.device_id)
                 time.sleep(3)
                 print("点击退出直播间")
+            elif self.check_zhibo_is_closed():
+                os.system("adb -s %s shell input keyevent 4" % self.device_id)
+                time.sleep(3)
+                print("点击退出直播间")
+            elif self.check_in_follow_list():
+                os.system("adb -s %s shell input tap 390 590" % self.device_id)
+                print("点击打开直播间的列表")
+                time.sleep(2)
             else:
                 print("当前页面不在直播间")
                 time.sleep(600)  # 等待10分钟继续检查
@@ -541,8 +588,10 @@ class fudai_analyse:
 
     def check_contain(self, contains=''):
         """检查福袋内容是否想要"""
-        contains_not_want = []
-        contains_want = ["加固鱼护", "鱼竿", "钓箱", "钓杆", "鱼漂盒"]
+        contains_not_want = ["鱼护", "钓鱼帽", "水壶", "水杯", "线组", "浮漂", "网头", "硬不", "勺", "缠把带", "SOUTH泛用", "浮漆", "仕挂",
+                             "缠带", "鱼线", "绑钩钳", "诱惑配方", "鱼漂", "黑漂", "子线", "钓箱配件", "鱼饵", "钓鱼桶", "店铺红包", "钻皮"
+                             ,"渔之源-高品质支架", "巨物钓线"]  #, "饵料", "(旗舰店)随机钓竿一支"
+        contains_want = ["加固鱼护", "鱼竿", "钓箱", "钓杆", "鱼漂盒"]  #, "一味鲫饵料"
         if self.get_current_hour() < 7:
             return False
         for contain in contains_want:
@@ -695,7 +744,7 @@ class fudai_analyse:
                     swipe_times = 0  # 滑动次数归0
                 time.sleep(5)
                 continue
-            elif wait_times >= 4:
+            elif wait_times >= 4:  # 如果福袋不存在，且不需要切换直播间，但等待了很久
                 if swipe_times < 15:  # 上划次数不到10次，就继续上划
                     os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
                     print("直播间等待2分钟无福袋，上划切换直播间")
@@ -704,16 +753,15 @@ class fudai_analyse:
                     continue
                 else:
                     print("直播间等待2分钟无福袋，退出返回直播列表")
-                    os.system("adb -s %s shell input keyevent 4" % self.device_id)
-                    time.sleep(3)
+                    self.back_to_zhibo_list()
                     self.into_zhibo_from_list()
                     swipe_times = 0  # 滑动次数归0
                 wait_times = 0
                 time.sleep(5)
                 continue
-            else:
+            else:  # 如果福袋不存在，且不需要切换直播间，且等待轮数不够
                 print("直播间暂无福袋，等待30S")
-                wait_times += 1
+                # wait_times += 1
                 time.sleep(30)
                 continue
             self.get_screenshot()
@@ -740,9 +788,10 @@ class fudai_analyse:
                 os.system("adb -s {} shell input tap {} 440".format(self.device_id, x + 45))  # 点击刚才打开小福袋的位置
                 print("点击小福袋位置，关闭福袋详情")
                 time.sleep(1)
-                os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
-                print("抽奖倒计时时间小于15秒，不参与，上划切换直播间")
-                swipe_times += 1
+                if needswitch:
+                    os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
+                    print("抽奖倒计时时间小于15秒，不参与，上划切换直播间")
+                    swipe_times += 1
                 time.sleep(5)
                 continue
             if needswitch and lastsecond >= 60*wait_minutes:  # 如果需要切换且倒计时时间大于设定的分钟
@@ -791,25 +840,19 @@ class fudai_analyse:
                 print("下完单点击返回直播间，等待30S")
                 time.sleep(30)
                 continue
-            elif self.check_in_zhibo_list():  #如果已经退出到直播间列表
-                self.into_zhibo_from_list()
-                swipe_times = 0  # 滑动次数归0
-                continue
             elif self.check_zhibo_is_closed():
                 print("直播间已关闭，上划切换直播间")
                 swipe_times += 1
                 os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
                 time.sleep(10)
                 continue
-            elif self.check_zhibo_is_closed_guess_whatyoulike():
-                print("直播间已关闭，上划切换直播间")
-                swipe_times += 1
-                os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
-                time.sleep(10)
+            elif self.check_in_zhibo_list():  #如果已经退出到直播间列表
+                self.into_zhibo_from_list()
+                swipe_times = 0  # 滑动次数归0
                 continue
 
 
 
 if __name__ == '__main__':
     douyin = fudai_analyse()
-
+    douyin.check_zhibo_is_closed()
