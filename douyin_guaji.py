@@ -10,7 +10,7 @@ class fudai_guaji:
         """根据自己截图的实际情况，修改y轴即高度的偏移值"""
         device_id = self.analyser.select_device()
         if device_id:
-            self.analyser.fudai_choujiang(device_id, y_pianyi, y_resolution, False, 15)
+            self.analyser.fudai_choujiang(device_id, y_pianyi, y_resolution, True, 5)
             return True
         time.sleep(10)
         self.guaji(y_pianyi)
