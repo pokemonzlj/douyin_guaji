@@ -77,6 +77,15 @@ class fudai_analyse:
     3.优化了领奖完成后返回直播间领奖界面依旧没关闭的情况
     4.修复了过了凌晨之后直播间一直没有福袋的判定问题
 
+    V2.1
+    1.修复节假日出现的直播红包弹窗一直无法被退出关闭的问题
+    2.兼容操控通过wifi直连到笔记本电脑上的手机
+    3.优化弹窗人机验证后，点击返回无法退出验证的情况
+    4.加入手机电量验证逻辑
+    5.增加手机电量不足时进入待机模式的逻辑，避免手机直接关机
+    6.兼容领奖完成后，判定关闭中奖弹窗后还有一个提醒领奖窗口的情况
+    7.优化凌晨后整个直播列表无直播间导致无法刷新的问题
+
     未来更新
     1.获取直播间名字，关联奖品和倒计时，加入判定队列
     2.完全自动处理防沉迷验证
@@ -85,34 +94,21 @@ class fudai_analyse:
     5.兼容直播提早开奖，直播间关闭的判定
     6.调整一下凌晨检查直播间列表的数量
     7.修复：没有抽中，点击:我知道了,关闭弹窗，弹窗未关闭的问题
-    8.增加点击福袋无法打开，被系统限制参与抽奖的处理逻辑
-    9.优化凌晨后整个直播列表无直播间导致无法刷新的问题
-    10.兼容手机模拟器启动抖音挂机（需要朋友们提供一个稳定能运行抖音的模拟器）
+    8.增加待机模式，当手机电量不足的时候自动关闭抖音，等电量恢复后再启动
+    9.兼容电脑模拟器，支持直接用模拟器挂抖音，无需额外手机
+    10.兼容挂机过程中弹出的：开通特惠省钱卡的弹窗
+    11.增加点击福袋无法打开，被系统限制参与抽奖的判定逻辑
     """
 
     def __init__(self):
         self.device_id = '你自己的手机设备号'
         self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
         self.resolution_ratio_x = 1080
-        self.resolution_ratio_y = 2340
+        self.resolution_ratio_y = 2400
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
         log_file = open(timepic+'.log', 'w')
         sys.stdout = Tee(sys.stdout, log_file)
         self.last_find_fudai_time = 0.0
-
-    # def get_screenshot_new(self, path='pic'):
-    #     if path != 'pic':
-    #         self.screenshot_dir = os.path.join(os.path.dirname(__file__), 'target_pic')
-    #     # 合并命令到一个shell脚本中，但这里我们仍然分开执行
-    #     screenshot_path = os.path.join(self.screenshot_dir, 'screenshot.png')
-    #     # 捕获截图
-    #     subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'screencap', '-p', '/sdcard/DCIM/screenshot.png'])
-    #     # 拉取截图到本地
-    #     subprocess.check_call(['adb', '-s', self.device_id, 'pull', '/sdcard/DCIM/screenshot.png', screenshot_path])
-    #     # 删除设备上的截图
-    #     subprocess.check_call(['adb', '-s', self.device_id, 'shell', 'rm', '/sdcard/DCIM/screenshot.png'])
-    #     timetag = datetime.now().strftime('%H:%M:%S')
-    #     print("{} 获取屏幕截图".format(timetag))
 
     def get_screenshot(self, path='pic'):
         """截图3个adb命令需要2S左右的时间"""
@@ -202,13 +198,7 @@ class fudai_analyse:
             text = pytesseract.image_to_string(img, lang='chi_sim')
         # text = pytesseract.image_to_string(img, lang='eng+chi_sim')
         else:
-            # img = img.resize((img.width * 2, img.height * 2))  # 调整大小
-            # new_size = (img.width * 2, img.height * 2)
-            # img = img.resize(new_size, Image.LANCZOS)
-            # 降噪处理
             img = img.filter(ImageFilter.MedianFilter(size=3))  # MedianFilter 将每个像素的值替换为其周围像素值的中值，以减少图像中的噪声。
-            # 在这里，size=3 表示滤波器的尺寸为 3x3，即在每个像素周围取一个 3x3 的区域进行中值计算。
-            # img.show()
             text = pytesseract.image_to_string(img, lang='eng')
         if type == 2:
             # print(text)
@@ -274,13 +264,6 @@ class fudai_analyse:
         pic = path + '/cut3.png'
         img = Image.open(pic)
         img = img.convert('RGB')
-        # img = img.resize((img.width * 3, img.height * 3))  # 调整大小
-        # img = img.convert('L')  # 转换为灰度图
-        # img = img.point(lambda x: 0 if x < 150 else 255)  # 二值化
-        # img = img.point(lambda p: (0, 0, 0) if p[0] < 50 and p[1] < 50 and p[2] < 30
-        # else (255, 255, 255) if p[0] > 220 and p[1] > 220 and p[2] > 220
-        # else (128, 128, 128))
-        # datas = img.load()  # 创建一个图像访问对象
         width, height = img.size
         threshold = 90  # 阈值，用于判断颜色偏差是否较大
         for x in range(5, width-40):
@@ -312,22 +295,6 @@ class fudai_analyse:
                         img.putpixel((x, y), (255, 255, 255))  # 白色
                     else:
                         img.putpixel((x, y), (0, 0, 0))  # 黑色
-        # for x in range(5, width - 40):
-        #     for y in range(20, height - 30):
-        #         if img.getpixel((x, y)) == (255, 255, 255):  # 如果当前点是白点
-        #             black_neighbors = 0
-        #             for dx in range(-1, 2):
-        #                 for dy in range(-1, 2):
-        #                     if img.getpixel((x + dx, y + dy)) == (0, 0, 0):  # 如果周围点是黑点
-        #                         black_neighbors += 1
-        #             if black_neighbors > 6:  # 如果周围黑点数量大于5个
-        #                 img.putpixel((x, y), (0, 0, 0))  # 将当前点也设置为黑点
-        # img.show() #展示一下处理后的图片
-        # img = img.filter(ImageFilter.MedianFilter(size=3))  # 中值滤波是一种有效的去除噪声的方法，它可以将每个像素点的值替换为其周围像素点灰度值的中值
-        # img = img.convert('1')
-        # # 膨胀与腐蚀操作
-        # img = img.filter(ImageFilter.MinFilter(size=3))
-        # img = img.filter(ImageFilter.MaxFilter(size=3))
         save_pic = path +'/newimg.png'
         img.save(save_pic)
 
@@ -403,10 +370,6 @@ class fudai_analyse:
                     self.last_find_fudai_time = time.time()
                     return x
             loop += 1
-            # end_time = time.time()
-            # execution_time = end_time - start_time
-            # 打印执行时间
-            # print("Execution time: {} seconds".format(execution_time))
             if loop >= 4:
                 self.deal_robot_analyse()
             elif loop < 2 and self.check_zhibo_is_closed():
@@ -445,12 +408,19 @@ class fudai_analyse:
                 time.sleep(2)
                 self.get_screenshot()
             elif robot_result == 2:
-                print("无法处理图片验证的人机，点击返回退出验证，等待10分钟")
-                os.system("adb -s %s shell input keyevent 4" % self.device_id)
-                time.sleep(300)
+                print("无法处理图片验证的人机，点击关闭退出验证，等待30分钟")
+                os.system("adb -s {} shell input tap 910 {}".format(self.device_id,
+                                                                    800 * self.resolution_ratio_y // 2400))  # 点击关闭
+                # os.system("adb -s %s shell input keyevent 4" % self.device_id)
+                time.sleep(1800)
                 break
             else:
                 break
+
+    def click_confirm(self):
+        """点击确认键"""
+        os.system("adb -s %s shell input keyevent 66" % self.device_id)
+        print("点击确认键")
 
     def reflash_zhibo(self):
         """在关注列表，下拉刷新直播间"""
@@ -504,7 +474,8 @@ class fudai_analyse:
 
     def back_to_zhibo_list(self):
         """功能初始化，回到直播间列表"""
-        while True:
+        click_back_times = 0
+        while click_back_times < 4:
             self.get_screenshot()
             if self.check_in_zhibo_list():
                 return False
@@ -517,28 +488,31 @@ class fudai_analyse:
             os.system("adb -s %s shell input keyevent 4" % self.device_id)
             print("点击返回")
             time.sleep(2)
+            click_back_times += 1
 
     def into_zhibo_from_list(self):
         """从直接列表进入直播间"""
         while True:
             self.get_screenshot()
             if self.check_in_zhibo_list():
-                self.reflash_zhibo()  # 刷新直播间列表
                 current_hour = self.get_current_hour()
-                if current_hour > 6:  # 如果当前时间已经早上7点多了，一定有直播间了
-                    os.system("adb -s {} shell input tap 290 {}".format(self.device_id, 490*self.resolution_ratio_y//2400))  # 点击第一个直播间
-                    print("点击打开第一个直播间")
-                    break  # 跳出循环，直播间已找到
-                elif 3 < current_hour <= 6:
+                if 3 < current_hour <= 6:
                     print("等待10分钟继续检查")
                     time.sleep(600)  # 等待10分钟继续检查
-                elif self.check_zhibo_list():  # 如果存在直播间
-                    os.system("adb -s {} shell input tap 290 {}".format(self.device_id, 490*self.resolution_ratio_y//2400))  # 点击第一个直播间
-                    print("点击打开第一个直播间")
-                    break
                 else:
-                    time.sleep(600)  # 等待10分钟继续检查
-                    print("等待10分钟后再检查")
+                    self.reflash_zhibo()  # 刷新直播间列表
+                    if current_hour > 8:  # 如果当前时间已经早上9点多了，一定有直播间了
+                        os.system("adb -s {} shell input tap 290 {}".format(self.device_id, 490*self.resolution_ratio_y//2400))  # 点击第一个直播间
+                        print("点击打开第一个直播间")
+                        break  # 跳出循环，直播间已找到
+                    elif self.check_zhibo_list_have_zhibo():  # 如果存在直播间
+                        os.system("adb -s {} shell input tap 290 {}".format(self.device_id, 490*self.resolution_ratio_y//2400))  # 点击第一个直播间
+                        print("点击打开第一个直播间")
+                        break
+                    else:  # 如果直播列表是空的，则退出到关注列表
+                        os.system("adb -s %s shell input keyevent 4" % self.device_id)
+                        time.sleep(3)
+                        print("点击退出到关注列表")
             elif self.check_zhibo_have_popup():
                 os.system("adb -s {} shell input tap 540 {}".format(self.device_id, 1620*self.resolution_ratio_y//2400))
                 print("点击关闭红包弹窗")
@@ -558,7 +532,7 @@ class fudai_analyse:
                 time.sleep(600)  # 等待10分钟继续检查
                 print("等待10分钟后再检查")
 
-    def check_zhibo_list(self):
+    def check_zhibo_list_have_zhibo(self):
         """检查直播列表是否存在直播的内容"""
         self.get_screenshot()
         path = os.path.dirname(__file__) + '/pic'
@@ -574,8 +548,8 @@ class fudai_analyse:
         return True
 
     def check_zhibo_have_popup(self):
-        """判断直播间是否弹出了红包弹窗"""
-        self.cut_pic((425, 870*self.resolution_ratio_y//2400), (660, 940*self.resolution_ratio_y//2400), '', 'zhibo_hongbao')  # 福袋内容详情
+        """判断直播间是否弹出了节假日红包弹窗"""
+        self.cut_pic((425, 880*self.resolution_ratio_y//2400), (660, 960*self.resolution_ratio_y//2400), '', 'zhibo_hongbao')  # 福袋内容详情
         zhibo_list_title = self.analyse_pic_word('zhibo_hongbao', 1)
         if "最高金额" in zhibo_list_title:
             print("直播间有红包弹窗")
@@ -674,16 +648,6 @@ class fudai_analyse:
                 time.sleep(1)
                 click_times += 1
                 self.get_screenshot()
-                # self.get_screenshot()
-                # self.cut_pic((306, 2040 - self.y_pianyi), (780, 2110 - self.y_pianyi))  # 参与福袋抽奖的文字
-                # attend_button_text = self.analyse_pic_word('', 1)
-                # if renwu == 2:
-                #     os.system("adb -s %s shell input tap 500 2060" % self.device_id)  # 点击参与抽奖
-                #     print("点击参与抽奖")
-                # return True
-            # elif "点亮粉丝团" in attend_button_text:
-            #     os.system("adb -s %s shell input tap 500 2060" % self.device_id)  # 点击点亮粉丝团
-            #     time.sleep(2)
             else:
                 print("参与抽奖按钮文字没匹配上")
                 click_times = 2
@@ -708,7 +672,23 @@ class fudai_analyse:
         choujiang_result = self.analyse_pic_word('get_reward', 1)
         if "领取" in choujiang_result:
             print("存在奖品")
-            return y+200*self.resolution_ratio_y//2400
+            return (y+200)*self.resolution_ratio_y//2400
+        return False
+
+    def check_have_reward_notice_confirm(self):
+        """判断是否有领奖的二次确认提醒"""
+        path = os.path.dirname(__file__) + '/pic'
+        pic1_path = path + '/screenshot.png'
+        pic = Image.open(pic1_path)
+        # pic_new = Image.open(cut_pic_path)
+        pic_new = pic.convert('RGBA')
+        pix = pic_new.load()
+        self.cut_pic((370, 1350 * self.resolution_ratio_y // 2400),
+                     (680, 1440 * self.resolution_ratio_y // 2400), '', "notice_reward")  # 提醒领取奖品的弹窗
+        choujiang_result = self.analyse_pic_word('notice_reward', 1)
+        if "我知道了" in choujiang_result:
+            print("存在奖品领取提醒")
+            return True
         return False
 
     def get_reward(self, reward_y=0):
@@ -730,7 +710,12 @@ class fudai_analyse:
         if self.check_have_reward():
             print("领奖弹窗未关闭，点击关闭弹窗")
             os.system("adb -s {} shell input tap 540 {}".format(self.device_id, reward_y + 180*self.resolution_ratio_y//2400))  # 勾选协议
-            time.sleep(1)
+            time.sleep(2)
+        if self.check_have_reward_notice_confirm():
+            print("提醒领奖弹窗未关闭，点击我知道了，关闭弹窗")
+            os.system("adb -s {} shell input tap 540 {}".format(self.device_id,
+                                                                1400 * self.resolution_ratio_y // 2400))  # 勾选协议
+            time.sleep(2)
         time.sleep(30)
         print("等待30S")
 
@@ -739,8 +724,8 @@ class fudai_analyse:
         string = subprocess.Popen('adb devices', shell=True, stdout=subprocess.PIPE)
         totalstring = string.stdout.read()
         totalstring = totalstring.decode('utf-8')
-        # print(totalstring)
-        devicelist = re.compile(r'(\w*)\s*device\b').findall(totalstring)
+        pattern = r'(\b(?:[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?::[0-9]+)?|[A-Za-z0-9]{8,})\b)\s*device\b'
+        devicelist = re.findall(pattern, totalstring)
         devicenum = len(devicelist)
         if devicenum == 0:
             print("当前无设备连接电脑,请检查设备连接情况!")
@@ -765,6 +750,31 @@ class fudai_analyse:
                 num = int(num)
             return dictdevice[num]
 
+    def get_ballery_level(self):
+        """获取设备电量信息"""
+        battery_info = subprocess.Popen("adb -s %s shell dumpsys battery" % self.device_id, shell=True,
+                                        stdout=subprocess.PIPE)
+        battery_info_string = battery_info.stdout.read()
+        battery_info_string = bytes.decode(battery_info_string)
+        location = re.search('level:', battery_info_string)
+        span = location.span()
+        start, end = span
+        start = end + 1
+        for i in range(5):
+            end += 1
+            if battery_info_string[end] == "\n":
+                break
+        battery_level = battery_info_string[start:end]  # 第几个到第几个中间接冒号
+        print("设备当前电量为{}".format(battery_level))
+        return int(battery_level)
+
+    def deal_battery_level(self):
+        """针对电量不足的情况做处理"""
+        while self.get_ballery_level() < 30:
+            print("设备电量较低，返回直播列表，等待充电后继续挂机")
+            self.back_to_zhibo_list()
+            time.sleep(1800)  # 挂机30分钟
+
     def fudai_choujiang(self, device_id="", y_pianyi=0, y_resolution=2400, needswitch=False, wait_minutes=15):
         """默认不切换直播间"""
         self.device_id = device_id
@@ -773,8 +783,10 @@ class fudai_analyse:
         wait_times = 0  # 当前直播间的等待次数，累计4次没有福袋，则切换直播间
         swipe_times = 0  # 向上滑动的次数,当超出一定值，退出返回直播列表
         while True:
+            self.deal_battery_level()
             x = self.check_have_fudai()
             if self.check_no_fudai_time() > 1800:  # 如果30分钟都没有福袋
+                self.save_reward_pic()
                 self.back_to_zhibo_list()
                 self.into_zhibo_from_list()
                 continue
@@ -783,7 +795,7 @@ class fudai_analyse:
                 # self.cut_pic((x, 400), (x + 90, 455))  # 通常小福袋的位置
                 os.system("adb -s {} shell input tap {} {}".format(self.device_id, x + 45, 440*self.resolution_ratio_y//2400))  # 点击默认小福袋的位置
                 print("点击打开福袋详情")
-                time.sleep(2)
+                time.sleep(3)
             elif needswitch:  # 如果福袋不存在，且需要切换直播间
                 if swipe_times < 15 and self.get_current_hour() > 6:  # 上划次数不到10次，且已经是7点后了，就继续上划
                     os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
@@ -878,14 +890,7 @@ class fudai_analyse:
             if "没有抽中" in choujiang_result:
                 os.system("adb -s {} shell input tap 540 {}".format(self.device_id, 1380*self.resolution_ratio_y//2400))  # 点击我知道了
                 print("没有抽中，点击:我知道了,关闭弹窗")
-                time.sleep(1)
-                # if needswitch:
-                #     os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
-                #     print("结束抽奖，上划切换直播间")
-                #     swipe_times += 1
-                #     time.sleep(5)
-                #     continue
-                time.sleep(10)
+                time.sleep(11)
                 continue
               # 没弹出没有抽中，可能是直播间关闭，可能是中奖了
             reward_y = self.check_have_reward()
@@ -912,4 +917,5 @@ class fudai_analyse:
 
 if __name__ == '__main__':
     douyin = fudai_analyse()
-    douyin.check_zhibo_is_closed()
+    # douyin.check_zhibo_have_popup()
+    douyin.deal_battery_level()
