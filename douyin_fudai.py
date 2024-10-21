@@ -86,6 +86,16 @@ class fudai_analyse:
     6.兼容领奖完成后，判定关闭中奖弹窗后还有一个提醒领奖窗口的情况
     7.优化凌晨后整个直播列表无直播间导致无法刷新的问题
 
+    V2.2
+    1.优化日志打印逻辑
+    2.增加点击福袋无法打开，被系统限制参与抽奖的判定逻辑
+    3.修复在固定直播间挂机会忽然切换直播间的问题
+    4.修复：没有抽中，点击:我知道了,关闭弹窗，弹窗未关闭的问题
+    5.修复进入没有加入粉丝团的直播间，无法抽奖但没有切换直播间的问题
+    6.增加一个抽奖按钮的判定：活动已结束
+    7.增加了切换到未加入店铺的直播间的抽奖判定
+    8.修复：中奖后下单，回到直播间依旧存在中奖弹窗提醒关不掉的问题
+
     未来更新
     1.获取直播间名字，关联奖品和倒计时，加入判定队列
     2.完全自动处理防沉迷验证
@@ -93,11 +103,9 @@ class fudai_analyse:
     4.增加一定的等待机制，减少被识别为人机的概率
     5.兼容直播提早开奖，直播间关闭的判定
     6.调整一下凌晨检查直播间列表的数量
-    7.修复：没有抽中，点击:我知道了,关闭弹窗，弹窗未关闭的问题
-    8.增加待机模式，当手机电量不足的时候自动关闭抖音，等电量恢复后再启动
-    9.兼容电脑模拟器，支持直接用模拟器挂抖音，无需额外手机
-    10.兼容挂机过程中弹出的：开通特惠省钱卡的弹窗
-    11.增加点击福袋无法打开，被系统限制参与抽奖的判定逻辑
+    7.兼容挂机过程中弹出的：开通特惠省钱卡的弹窗
+    8.兼容电脑模拟器，支持直接用模拟器挂抖音，无需额外手机
+
     """
 
     def __init__(self):
@@ -201,8 +209,6 @@ class fudai_analyse:
             img = img.filter(ImageFilter.MedianFilter(size=3))  # MedianFilter 将每个像素的值替换为其周围像素值的中值，以减少图像中的噪声。
             text = pytesseract.image_to_string(img, lang='eng')
         if type == 2:
-            # print(text)
-            # text = ''.join([char for char in text if char.isnumeric() or char == ':'])  #针对时间去噪
             text = ''.join([char for char in text if char.isnumeric()])  # 针对时间去噪
         reformatted_text = text.replace(' ', '').replace('\n', '')
         # print(reformatted_text)
@@ -313,9 +319,6 @@ class fudai_analyse:
             print("剩余总秒数：", total_seconds)
             if total_seconds > 900:  # 如果识别到的分钟大于15，说明识别异常了，按15分钟处理
                 total_seconds = 890
-            # datetime.strptime(in_time, '%H:%M')
-            # time_obj = datetime.strptime(in_time, '%H:%M')
-            # print("转换后的时间格式：", time_obj)
             now = datetime.now()
             future_time = now + timedelta(seconds=total_seconds)
             # 将到期时间转换为时间戳
@@ -400,12 +403,13 @@ class fudai_analyse:
 
     def deal_robot_analyse(self):
         """处理人机校验，包含各种情况"""
-        while True:
+        swipe_times = 0
+        while swipe_times < 10:
             robot_result = self.check_have_robot_analyse()
             if robot_result == 1:
                 distance = self.check_robot_pic_distance()
                 self.deal_swipe_robot_analyse(distance)
-                time.sleep(2)
+                time.sleep(10)
                 self.get_screenshot()
             elif robot_result == 2:
                 print("无法处理图片验证的人机，点击关闭退出验证，等待30分钟")
@@ -416,6 +420,12 @@ class fudai_analyse:
                 break
             else:
                 break
+            swipe_times += 1
+        if swipe_times >= 10:
+            print("无法处理图片验证的人机，点击关闭退出验证，等待30分钟")
+            os.system("adb -s {} shell input tap 910 {}".format(self.device_id,
+                                                                800 * self.resolution_ratio_y // 2400))  # 点击关闭
+            time.sleep(1800)
 
     def click_confirm(self):
         """点击确认键"""
@@ -459,7 +469,7 @@ class fudai_analyse:
         if "已结束" in zhibo_list_title:
             print("当前直播间已关闭")
             return True
-        print("未判定到当前直播已关闭")
+        print("当前直播间正常进行中")
         return False
 
     def check_zhibo_is_closed_guess_whatyoulike(self):
@@ -526,8 +536,6 @@ class fudai_analyse:
             elif self.check_in_follow_list():
                 os.system("adb -s {} shell input tap 390 {}".format(self.device_id, 590*self.resolution_ratio_y//2400))
                 print("点击打开直播间的列表")
-                time.sleep(2)
-            else:
                 print("当前页面不在直播间")
                 time.sleep(600)  # 等待10分钟继续检查
                 print("等待10分钟后再检查")
@@ -558,15 +566,16 @@ class fudai_analyse:
 
     def check_no_fudai_time(self):
         """无福袋等待时间检查"""
-        if 3 < self.get_current_hour() < 7:
+        if 3 < self.get_current_hour() < 7:  # 如果是凌晨4-6点
             self.last_find_fudai_time = 0.00
-        elif self.last_find_fudai_time == 0.00:  # 如果过了不挂机时间，把当前时间赋值给上次找到福袋的时间
+        elif self.last_find_fudai_time == 0.00 or self.last_find_fudai_time == 0:  # 如果过了不挂机时间，把当前时间赋值给上次找到福袋的时间
             self.last_find_fudai_time = time.time()
-        if self.last_find_fudai_time != 0.00:
+        if self.last_find_fudai_time > 0:
             current_time = time.time()
             wait_time = current_time - self.last_find_fudai_time
+            wait_time = round(wait_time, 1)
             if wait_time > 1:
-                print("距离上一次找到福袋已经过去{}秒".format(wait_time))
+                print("距离上一次识别到福袋已经过去{}秒".format(wait_time))
             return wait_time
         return 0
 
@@ -613,22 +622,22 @@ class fudai_analyse:
             print("参与抽奖按钮文字内容：{}".format(attend_button_text))
             if "参与成功" in attend_button_text:  # 如果识别到已经参与抽奖
                 print("已经参与，等待开奖")
-                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 440*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 470*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
                 print("点击福袋外部，关闭福袋详情")
                 return True
             elif "还需看播" in attend_button_text:  # 如果识别到已经参与抽奖
                 print("已经参与，等待看播时间凑齐开奖")
-                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 440*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 470*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
                 print("点击福袋外部，关闭福袋详情")
                 return True
             elif "无法参与" in attend_button_text:  # 如果识别到无法参与抽奖
                 print("条件不满足，无法参与抽奖")
-                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 440*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 470*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
                 print("点击福袋外部，关闭福袋详情")
                 return False
             elif "时长不足" in attend_button_text:  # 如果识别到无法参与抽奖
                 print("看播时长不够了，无法参与抽奖")
-                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 440*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 470*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
                 print("点击福袋外部，关闭福袋详情")
                 return False
             elif "评论" in attend_button_text:
@@ -639,20 +648,49 @@ class fudai_analyse:
                 os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 2060*self.resolution_ratio_y//2400))  # 点击参与抽奖
                 print("点击参与抽奖")
                 return True
+            elif "加入粉丝团(1钻石)" in attend_button_text:
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id,
+                                                                    440 * self.resolution_ratio_y // 2400))  # 点击刚才打开福袋的旁边位置
+                print("点击福袋外部，关闭支付弹窗")
+                time.sleep(1)
+                return False
             elif "粉丝团" in attend_button_text:
                 os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 2060*self.resolution_ratio_y//2400))  # 点击加入粉丝团、点亮粉丝团
                 time.sleep(2)
-                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 440*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id, 470*self.resolution_ratio_y//2400))  # 点击刚才打开福袋的旁边位置
                 print("点击福袋外部，关闭支付弹窗")
                 # os.system("adb -s %s shell input keyevent 4" % self.device_id) #退出充值的弹窗
                 time.sleep(1)
                 click_times += 1
                 self.get_screenshot()
+            elif "活动已结束" in attend_button_text:
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id,
+                                                                    440 * self.resolution_ratio_y // 2400))  # 点击刚才打开福袋的旁边位置
+                print("点击福袋外部，关闭福袋详情")
+                return False
+            elif "开通店铺会员" in attend_button_text:
+                os.system("adb -s %s shell input keyevent 4" % self.device_id)
+                time.sleep(1)
+                os.system("adb -s {} shell input tap 500 {}".format(self.device_id,
+                                                                    440 * self.resolution_ratio_y // 2400))  # 点击刚才打开福袋的旁边位置
+                print("点击福袋外部，关闭入会弹窗")
+                time.sleep(1)
+                return False
             else:
                 print("参与抽奖按钮文字没匹配上")
                 click_times = 2
                 return False
         print("参与抽奖多次点击失败")
+        return False
+
+    def check_have_no_award(self):
+        """判定是否未中奖"""
+        self.get_screenshot()
+        self.cut_pic((357, 658 * self.resolution_ratio_y // 2400), (740, 750 * self.resolution_ratio_y // 2400), '',
+                     "choujiang_result")  # 没有抽中福袋位置
+        choujiang_result = self.analyse_pic_word('choujiang_result', 1)
+        if "没有抽中" in choujiang_result:
+            return True
         return False
 
     def check_have_reward(self):
@@ -677,15 +715,10 @@ class fudai_analyse:
 
     def check_have_reward_notice_confirm(self):
         """判断是否有领奖的二次确认提醒"""
-        path = os.path.dirname(__file__) + '/pic'
-        pic1_path = path + '/screenshot.png'
-        pic = Image.open(pic1_path)
-        # pic_new = Image.open(cut_pic_path)
-        pic_new = pic.convert('RGBA')
-        pix = pic_new.load()
+        self.get_screenshot()
         self.cut_pic((370, 1350 * self.resolution_ratio_y // 2400),
-                     (680, 1440 * self.resolution_ratio_y // 2400), '', "notice_reward")  # 提醒领取奖品的弹窗
-        choujiang_result = self.analyse_pic_word('notice_reward', 1)
+                     (680, 1440 * self.resolution_ratio_y // 2400), '', "reward_notice_confirm")  # 提醒领取奖品的弹窗
+        choujiang_result = self.analyse_pic_word('reward_notice_confirm', 1)
         if "我知道了" in choujiang_result:
             print("存在奖品领取提醒")
             return True
@@ -709,23 +742,29 @@ class fudai_analyse:
         time.sleep(10)
         if self.check_have_reward():
             print("领奖弹窗未关闭，点击关闭弹窗")
-            os.system("adb -s {} shell input tap 540 {}".format(self.device_id, reward_y + 180*self.resolution_ratio_y//2400))  # 勾选协议
+            # self.save_reward_pic()
+            os.system("adb -s {} shell input tap 540 {}".format(self.device_id, reward_y + 180*self.resolution_ratio_y//2400))
+            print("点击坐标位置:540 {}关闭领奖弹窗".format(reward_y + 180*self.resolution_ratio_y//2400))
+            time.sleep(2)
+            os.system("adb -s %s shell input keyevent 4" % self.device_id)
             time.sleep(2)
         if self.check_have_reward_notice_confirm():
             print("提醒领奖弹窗未关闭，点击我知道了，关闭弹窗")
             os.system("adb -s {} shell input tap 540 {}".format(self.device_id,
-                                                                1400 * self.resolution_ratio_y // 2400))  # 勾选协议
+                                                                1400 * self.resolution_ratio_y // 2400))  # 点击我知道了
             time.sleep(2)
         time.sleep(30)
-        print("等待30S")
+        print("关闭中奖提醒后等待30S")
 
     def select_device(self):
         """选择需要连接的设备"""
         string = subprocess.Popen('adb devices', shell=True, stdout=subprocess.PIPE)
         totalstring = string.stdout.read()
         totalstring = totalstring.decode('utf-8')
+        # print(totalstring)
         pattern = r'(\b(?:[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?::[0-9]+)?|[A-Za-z0-9]{8,})\b)\s*device\b'
         devicelist = re.findall(pattern, totalstring)
+        # devicelist = re.compile(r'(\w*)\s*device\b').findall(totalstring)
         devicenum = len(devicelist)
         if devicenum == 0:
             print("当前无设备连接电脑,请检查设备连接情况!")
@@ -765,13 +804,14 @@ class fudai_analyse:
             if battery_info_string[end] == "\n":
                 break
         battery_level = battery_info_string[start:end]  # 第几个到第几个中间接冒号
+        battery_level = int(battery_level)
         print("设备当前电量为{}".format(battery_level))
-        return int(battery_level)
+        return battery_level
 
     def deal_battery_level(self):
         """针对电量不足的情况做处理"""
         while self.get_ballery_level() < 30:
-            print("设备电量较低，返回直播列表，等待充电后继续挂机")
+            print("设备电量较低，退出到直播列表，等待电量恢复后继续挂机")
             self.back_to_zhibo_list()
             time.sleep(1800)  # 挂机30分钟
 
@@ -782,6 +822,7 @@ class fudai_analyse:
         self.resolution_ratio_y = y_resolution
         wait_times = 0  # 当前直播间的等待次数，累计4次没有福袋，则切换直播间
         swipe_times = 0  # 向上滑动的次数,当超出一定值，退出返回直播列表
+        fudai_not_open_times = 0  # 无法打开福袋的次数
         while True:
             self.deal_battery_level()
             x = self.check_have_fudai()
@@ -834,15 +875,15 @@ class fudai_analyse:
                 time.sleep(5)
                 continue
             else:  # 如果福袋不存在，且不需要切换直播间，且等待轮数不够
-                print("直播间暂无福袋，等待30S")
+                print("直播间暂无福袋，等待60S")
                 # wait_times += 1
-                time.sleep(30)
+                time.sleep(60)
                 continue
             self.get_screenshot()
             renwu = self.check_detail_height()
             fudai_content_text, time_text = self.get_fudai_contain(renwu)
             if self.check_contain(fudai_content_text) and needswitch:  # 如果福袋内容是不想要的
-                os.system("adb -s {} shell input tap {} {}".format(self.device_id, x + 45, 440*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置
+                os.system("adb -s {} shell input tap {} {}".format(self.device_id,x + 45, 470*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置的旁边
                 print("点击小福袋位置，关闭福袋详情")
                 time.sleep(1)
                 os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
@@ -852,14 +893,27 @@ class fudai_analyse:
                 continue
             result = self.check_countdown(time_text)
             if result:
+                fudai_not_open_times = 0
                 lastsecond, future_timestamp = result
-            else:  # 如果识别到的内容不太对
-                os.system("adb -s {} shell input tap {} {}".format(self.device_id, x + 45, 440*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置
-                print("点击小福袋位置，关闭福袋详情")
-                time.sleep(1)
-                continue
+            else:  # 如果识别到的倒计时内容不太对，则再判定一次
+                self.get_screenshot()
+                renwu = self.check_detail_height()
+                fudai_content_text, time_text = self.get_fudai_contain(renwu)
+                result = self.check_countdown(time_text)
+                if result:
+                    fudai_not_open_times = 0
+                    lastsecond, future_timestamp = result
+                else:
+                    fudai_not_open_times += 1
+                    os.system("adb -s {} shell input tap {} {}".format(self.device_id, x + 45, 470*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置的旁边
+                    print("第{}次打开福袋异常，点击小福袋旁边位置，坐标{},{}关闭福袋详情".format(fudai_not_open_times, x + 45, 470*self.resolution_ratio_y//2400))
+                    if fudai_not_open_times > 10:
+                        print("超过10次点击福袋无法打开详情，等待30分钟")
+                        time.sleep(1800)
+                    time.sleep(1)
+                    continue
             if lastsecond < 15 and needswitch:  # 如果不到15秒了，就不点了
-                os.system("adb -s {} shell input tap {} {}".format(self.device_id, x + 45, 440*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置
+                os.system("adb -s {} shell input tap {} {}".format(self.device_id,x + 45, 470*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置的旁边
                 print("点击小福袋位置，关闭福袋详情")
                 time.sleep(1)
                 if needswitch:
@@ -869,7 +923,7 @@ class fudai_analyse:
                 time.sleep(5)
                 continue
             if needswitch and lastsecond >= 60*wait_minutes:  # 如果需要切换且倒计时时间大于设定的分钟
-                os.system("adb -s {} shell input tap {} {}".format(self.device_id, x + 45, 440*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置
+                os.system("adb -s {} shell input tap {} {}".format(self.device_id, x + 45, 470*self.resolution_ratio_y//2400))  # 点击刚才打开小福袋的位置
                 print("点击小福袋位置，关闭福袋详情")
                 time.sleep(1)
                 os.system("adb -s %s shell input swipe 760 1600 760 800 200" % (self.device_id))
@@ -884,15 +938,19 @@ class fudai_analyse:
                 time.sleep(5)
                 continue
             time.sleep(lastsecond)
-            self.get_screenshot()
-            self.cut_pic((357, 658*self.resolution_ratio_y//2400), (740, 750*self.resolution_ratio_y//2400), '', "choujiang_result")  # 没有抽中福袋位置
-            choujiang_result = self.analyse_pic_word('choujiang_result', 1)
-            if "没有抽中" in choujiang_result:
-                os.system("adb -s {} shell input tap 540 {}".format(self.device_id, 1380*self.resolution_ratio_y//2400))  # 点击我知道了
+            no_award_result = self.check_have_no_award()
+            if no_award_result:
+                os.system("adb -s {} shell input tap 540 {}".format(self.device_id,
+                                                                    1270 * self.resolution_ratio_y // 2400))  # 点击我知道了
                 print("没有抽中，点击:我知道了,关闭弹窗")
-                time.sleep(11)
+                time.sleep(5)
+                no_award_result = self.check_have_no_award()
+                if no_award_result:
+                    os.system("adb -s {} shell input tap 540 {}".format(self.device_id,
+                                                                        1270 * self.resolution_ratio_y // 2400))  # 点击我知道了
+                    print("再次点击:我知道了,关闭弹窗")
+                    time.sleep(10)
                 continue
-              # 没弹出没有抽中，可能是直播间关闭，可能是中奖了
             reward_y = self.check_have_reward()
             if reward_y:
                 self.get_reward(reward_y)
@@ -908,14 +966,11 @@ class fudai_analyse:
                 swipe_times = 0  # 滑动次数归0
                 continue
             os.system("adb -s {} shell input tap 540 {}".format(self.device_id,
-                                                    1380 * self.resolution_ratio_y // 2400))  # 点击我知道了
+                                                    1270 * self.resolution_ratio_y // 2400))  # 点击我知道了
             print("没有抽中，点击:我知道了,关闭弹窗")
             time.sleep(10)
             continue
 
 
-
 if __name__ == '__main__':
     douyin = fudai_analyse()
-    # douyin.check_zhibo_have_popup()
-    douyin.deal_battery_level()
