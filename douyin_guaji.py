@@ -1,7 +1,6 @@
 import time
 from douyin_fudai import fudai_analyse
 
-
 class fudai_guaji:
     def __init__(self):
         self.analyser = fudai_analyse()
@@ -15,7 +14,6 @@ class fudai_guaji:
         time.sleep(10)
         self.guaji(y_pianyi)
 
-
 if __name__ == '__main__':
     choujiang = fudai_guaji()
-    choujiang.guaji(0, 1080, 2400)  # 参数第1个是y的偏移值，第2个是你手机横轴的分辨率，第3个是你手机纵轴的分辨率
+    choujiang.guaji(0, 1080, 2400)  # 运行只改这里，参数第1个是y的偏移值，第2个是你手机横轴x的分辨率，第3个是你手机纵轴y的分辨率
