@@ -9,12 +9,13 @@
 4.要是完全不知道咋弄或者运行后识别福袋内容有误，你可以到B站给叼哥充电，会帮你私人部署
 ## 注意
 5.缺少各种库文件的需要自己安装一下，免费文字识别库已经更新到PaddleOCR图像识别库  
+pip install pillow paddlepaddle paddleocr numpy  
 6.根据自己设备的情况，修改douyin_guaji.py文件中y轴的偏移像素值，可正可负，默认设置的Y轴值为403，通常调整区间在【-30,30】  
 默认手机分辨率是1080*2400的像素，即使是相同的分辨率，可能也会因为手机顶部的刘海不一样导致存在Y的偏移 
 ![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/127d1cf5-0814-4edf-846e-b9936e1cb108)
+7.将会在4.0版本自动识别偏移值，不需要调整任何参数既可自动运行（预计B站2W粉发布）  
 
-通过电脑的画图软件就能看图标的像素位置  
-![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/bb6ed6fb-84e1-463a-83c7-080c644f212d)  
+通过电脑的画图软件就能看图标的像素位置   
 关于判定福袋存不存在小图标  
 ![image](https://github.com/user-attachments/assets/f494242b-bd57-4969-bd95-eb4c77d8c39e)
 
