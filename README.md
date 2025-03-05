@@ -12,7 +12,7 @@
 pip install pillow paddlepaddle paddleocr numpy  
 6.根据自己设备的情况，修改douyin_guaji.py文件中y轴的偏移像素值，可正可负，默认设置的Y轴值为403，通常调整区间在【-30,30】  
 默认手机分辨率是1080*2400的像素，即使是相同的分辨率，可能也会因为手机顶部的刘海不一样导致存在Y的偏移 
-![image](https://github.com/pokemonzlj/douyin_guaji/assets/35096840/127d1cf5-0814-4edf-846e-b9936e1cb108)
+![image](https://github.com/user-attachments/assets/e99dbd11-137b-407f-a37f-92a7b8235f90)  
 7.将会在4.0版本自动识别偏移值，不需要调整任何参数既可自动运行（预计B站2W粉发布）  
 
 通过电脑的画图软件就能看图标的像素位置   
