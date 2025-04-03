@@ -7,6 +7,7 @@ from PIL import Image, ImageFilter
 import numpy as np
 import logging
 import re
+import random
 
 class underlying_operations:
     """底层操作类"""
@@ -168,8 +169,9 @@ class underlying_operations:
         if change_color == 1:
             img = img.point(lambda x: 0 if x < 128 else 255)  # 二值化
         elif change_color == 2:
-            img = img.point(lambda x: 0 if x < 251 else 255)  # 二值化
+            img = img.point(lambda x: 0 if x < 180 else 255)  # 二值化
         # img.save(pic)
+        # img.show()
         img_np = np.array(img)  # 将 Image 对象转换为 numpy 数组
         result = self.ocr.ocr(img_np)
         if result == [None]:
@@ -188,6 +190,12 @@ class underlying_operations:
 
     def delay(self, seconds=1):
         time.sleep(seconds)
+
+    def random_delay(self, min_seconds=1, max_seconds=100):
+        """等待随机的时长"""
+        random_wait_seconds = random.randint(min_seconds, max_seconds)
+        print("随机等待{}秒.".format(random_wait_seconds))
+        self.delay(random_wait_seconds)
 
     def check_countdown(self, last_time=''):
         """对倒计时时间进行转化，变成秒存储"""

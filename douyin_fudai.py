@@ -1,5 +1,4 @@
 import os
-import random
 import sys
 import time
 from PIL import Image
@@ -100,6 +99,16 @@ from Underlying_Operations import underlying_operations
     2.优化代码，拆分基础操作函数到单独库做引用
     3.执行脚本，不再需要手动设置手机分辨率参数，会自动设置手机对应的值
     4.兼容人脸检测的人机验证弹窗的判定
+    
+    V3.1
+    1.修复新账号中奖后，下完单返回到直播间，因为弹出一个‘添加抖音商城到桌面’的弹窗，导致页面还卡在‘购买成功’页面的问题
+    2.修复偶尔退出直播间，直接退到了个人中心，进而没有正确打开关注列表的问题
+    3.补充部分操作后的随机时长等待，规避被监控风险
+    
+    V3.2
+    1.调整开奖后弹窗的点击判定，避免没有成功关闭弹窗的情况
+    2.兼容开奖后没有中奖，但是给了会员专属优惠券的情况
+    3.优化开奖后判定是否中奖及后续的逻辑
 
     未来更新
     1.获取直播间名字，关联奖品和倒计时，加入判定队列
@@ -113,8 +122,10 @@ from Underlying_Operations import underlying_operations
     9.增加自动刷视频的功能，增加账号活跃度，提升中奖概率
     10.增加直播间互动的功能，增加账号活跃度，提升中奖概率
     11.处理异常操作导致弹窗：账号存在风险的验证
-    12.不再需要填写偏移值，会自动找到合适的偏移值
-    13.其他来自粉丝们需要的建议
+    12.兼容IOS系统
+    13.不再需要填写偏移值等任何参数，直接运行，会自动找到合适的偏移值进行后续操作
+    14.调整页面判断逻辑，实时记录当前所在页面的类型（直接间、直播列表、个人中心、订单页等）
+    15.其他来自粉丝们需要的建议
     """
 
 class Tee(object):
@@ -132,11 +143,13 @@ class Tee(object):
         for f in self.files:
             f.flush()
 
+
 class fudai_analyse:
     """福袋抽奖相关操作类"""
+
     def __init__(self):
-        self.device_id = 'XXXXXXXXX'
-        self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
+        self.device_id = 'XXXXXXXXXXX'
+        self.y_pianyi = 0
         self.resolution_ratio_x = 1080
         self.resolution_ratio_y = 2400
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
@@ -148,8 +161,7 @@ class fudai_analyse:
 
     def deal_robot_pic_change_color(self):
         """处理人机验证的图片，转为黑白图"""
-        self.operation.cut_pic((143 * self.resolution_ratio_x // 1080, 884 * self.resolution_ratio_y // 2400),
-                               (936 * self.resolution_ratio_x // 1080, 1380 * self.resolution_ratio_y // 2400), 'save', 'robot_verification')
+        self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
         path = os.path.dirname(__file__) + '/pic/save'
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
@@ -169,8 +181,7 @@ class fudai_analyse:
 
     def check_robot_pic_distance(self):
         """处理人机验证的图片"""
-        self.operation.cut_pic((143 * self.resolution_ratio_x // 1080, 884 * self.resolution_ratio_y // 2400),
-                     (936 * self.resolution_ratio_x // 1080, 1380 * self.resolution_ratio_y // 2400), '', 'robot_verification')
+        self.cut_pic(143, 884, 936, 1380, '', 'robot_verification')
         path = os.path.dirname(__file__) + '/pic'
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
@@ -200,8 +211,7 @@ class fudai_analyse:
 
     def deal_robot_pic(self):
         """处理人机验证的图片"""
-        self.operation.cut_pic((143 * self.resolution_ratio_x // 1080, 884 * self.resolution_ratio_y // 2400),
-                               (936 * self.resolution_ratio_x // 1080, 1380 * self.resolution_ratio_y // 2400), 'save', 'robot_verification')
+        self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
         path = os.path.dirname(__file__) + '/pic/save'
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
@@ -345,11 +355,17 @@ class fudai_analyse:
                 return False
         return False
 
+    def cut_pic(self, x_top=1, y_top=1, x_bottom=2, y_bottom=2, target='', cut_pic_name='', y_pianyi=0):
+        """裁剪图片方法"""
+        self.operation.cut_pic(
+            (x_top * self.resolution_ratio_x // 1080, y_top * self.resolution_ratio_y // 2400 + y_pianyi),
+            (x_bottom * self.resolution_ratio_x // 1080, y_bottom * self.resolution_ratio_y // 2400 + y_pianyi),
+            target,
+            cut_pic_name)
+
     def check_have_robot_analyse(self):
         """检查是否存在人机校验"""
-        self.operation.cut_pic((130 * self.resolution_ratio_x // 1080, 790 * self.resolution_ratio_y // 2400),
-                     (680 * self.resolution_ratio_x // 1080, 870 * self.resolution_ratio_y // 2400), '',
-                     'zhibo_yanzheng')  # 福袋内容详情
+        self.cut_pic(130, 790, 680, 870, '', 'zhibo_yanzheng')
         result = self.operation.analyse_pic_word('zhibo_yanzheng', 1)
         if "验证" in result:
             print("存在滑动图片人机校验，需要等待完成验证.")
@@ -357,9 +373,7 @@ class fudai_analyse:
         elif "形状相同" in result:
             print("存在点击图片人机校验，需要等待完成验证.")
             return 2
-        self.operation.cut_pic((340 * self.resolution_ratio_x // 1080, 1415 * self.resolution_ratio_y // 2400),
-                               (700 * self.resolution_ratio_x // 1080, 1518 * self.resolution_ratio_y // 2400), '',
-                               'zhibo_yanzheng')  # 福袋内容详情
+        self.cut_pic(340, 1415, 700, 1518, '', 'zhibo_yanzheng')
         result = self.operation.analyse_pic_word('zhibo_yanzheng')
         if "开始检测" in result:
             print("存在人脸识别人机校验，需要等待完成验证.")
@@ -428,21 +442,17 @@ class fudai_analyse:
 
     def check_in_follow_list(self):
         """判断是否界面在我的关注的列表页"""
-        self.operation.cut_pic((244 * self.resolution_ratio_x // 1080, 130 * self.resolution_ratio_y // 2400),
-                     (875 * self.resolution_ratio_x // 1080, 220 * self.resolution_ratio_y // 2400), '',
-                     'zhibo_follow_list')  # 福袋内容详情
-        zhibo_list_title = self.operation.analyse_pic_word('zhibo_follow_list', 1)
+        self.cut_pic(244, 130, 875, 220, '', 'zhibo_follow_list')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_follow_list')
         if "关注" in zhibo_list_title:
             print("当前界面在用户关注列表")
             return True
         return False
 
     def check_in_zhibo_list(self):
-        """检查是否当前在直播列表"""
-        self.operation.cut_pic((400 * self.resolution_ratio_x // 1080, 145 * self.resolution_ratio_y // 2400),
-                     (675 * self.resolution_ratio_x // 1080, 230 * self.resolution_ratio_y // 2400), '',
-                     'zhibo_list_title')  # 福袋内容详情
-        zhibo_list_title = self.operation.analyse_pic_word('zhibo_list_title', 1)
+        """检查是否当前在关注的直播列表"""
+        self.cut_pic(400, 145, 675, 230, '', 'zhibo_list_title')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_list_title')
         if "正在直播" in zhibo_list_title:
             print("当前界面已经在直播间列表")
             return True
@@ -450,9 +460,7 @@ class fudai_analyse:
 
     def check_zhibo_is_closed(self):
         """检查当前直播间是否关闭"""
-        self.operation.cut_pic((350 * self.resolution_ratio_x // 1080, 100 * self.resolution_ratio_y // 2400),
-                     (740 * self.resolution_ratio_x // 1080, 300 * self.resolution_ratio_y // 2400), '',
-                     'zhibo_status')  # 福袋内容详情
+        self.cut_pic(350, 100, 740, 300, '', 'zhibo_status')
         zhibo_list_title = self.operation.analyse_pic_word('zhibo_status')
         if "已结束" in zhibo_list_title:
             print("当前直播间已关闭")
@@ -462,9 +470,7 @@ class fudai_analyse:
 
     def check_zhibo_is_closed_guess_whatyoulike(self):
         """检查当前直播间是否关闭-判断猜你喜欢的位置"""
-        self.operation.cut_pic((440 * self.resolution_ratio_x // 1080, 1570 * self.resolution_ratio_y // 2400),
-                     (640 * self.resolution_ratio_x // 1080, 1640 * self.resolution_ratio_y // 2400), '',
-                     'zhibo_status')  # 福袋内容详情
+        self.cut_pic(440, 1570, 640, 1640, '', 'zhibo_status')
         zhibo_list_title = self.operation.analyse_pic_word('zhibo_status', 1)
         if "猜你喜欢" in zhibo_list_title:
             print("当前直播间已关闭")
@@ -548,9 +554,7 @@ class fudai_analyse:
 
     def check_zhibo_have_popup(self):
         """判断直播间是否弹出了节假日红包弹窗"""
-        self.operation.cut_pic((425 * self.resolution_ratio_x // 1080, 880 * self.resolution_ratio_y // 2400),
-                     (660 * self.resolution_ratio_x // 1080, 960 * self.resolution_ratio_y // 2400), '',
-                     'zhibo_hongbao')  # 福袋内容详情
+        self.cut_pic(425, 880, 660, 960, '', 'zhibo_hongbao')
         zhibo_list_title = self.operation.analyse_pic_word('zhibo_hongbao', 1)
         if "最高金额" in zhibo_list_title:
             print("直播间有红包弹窗")
@@ -577,37 +581,17 @@ class fudai_analyse:
     def get_fudai_contain(self, renwu=2):
         """获取福袋的内容和倒计时"""
         if renwu == 2:  # 如果是2个任务的
-            self.operation.cut_pic(
-                (390 * self.resolution_ratio_x // 1080, 1240 * self.resolution_ratio_y // 2400 + self.y_pianyi),
-                (1000 * self.resolution_ratio_x // 1080, 1410 * self.resolution_ratio_y // 2400 + self.y_pianyi), '',
-                'fudai_content')  # 福袋内容详情
-            self.operation.cut_pic((397 * self.resolution_ratio_x // 1080, 1120 * self.resolution_ratio_y // 2400),
-                         (690 * self.resolution_ratio_x // 1080, 1210 * self.resolution_ratio_y // 2400), '',
-                         'fudai_countdown')  # 完整福袋详情倒计时
+            self.cut_pic(390, 1240, 1000, 1460, '', 'fudai_content', self.y_pianyi)  # 福袋内容详情
+            self.cut_pic(390, 1110, 690, 1220, '', 'fudai_countdown')  # 完整福袋详情倒计时
         elif renwu == 1:  # 如果是1个任务的
-            self.operation.cut_pic(
-                (390 * self.resolution_ratio_x // 1080, 1300 * self.resolution_ratio_y // 2400 + self.y_pianyi),
-                (1000 * self.resolution_ratio_x // 1080, 1470 * self.resolution_ratio_y // 2400 + self.y_pianyi), '',
-                'fudai_content')  # 福袋内容详情
-            self.operation.cut_pic((390 * self.resolution_ratio_x // 1080, 1190 * self.resolution_ratio_y // 2400),
-                         (690 * self.resolution_ratio_x // 1080, 1280 * self.resolution_ratio_y // 2400), '',
-                         'fudai_countdown')  # 完整福袋详情倒计时
+            self.cut_pic(390, 1300, 1000, 1520, '', 'fudai_content', self.y_pianyi)  # 福袋内容详情
+            self.cut_pic(390, 1180, 690, 1290, '', 'fudai_countdown')  # 完整福袋详情倒计时
         elif renwu == 3:  # 如果是3个任务的
-            self.operation.cut_pic(
-                (390 * self.resolution_ratio_x // 1080, 1160 * self.resolution_ratio_y // 2400 + self.y_pianyi),
-                (1000 * self.resolution_ratio_x // 1080, 1340 * self.resolution_ratio_y // 2400 + self.y_pianyi), '',
-                'fudai_content')  # 福袋内容详情
-            self.operation.cut_pic((390 * self.resolution_ratio_x // 1080, 1020 * self.resolution_ratio_y // 2400),
-                         (690 * self.resolution_ratio_x // 1080, 1110 * self.resolution_ratio_y // 2400), '',
-                         'fudai_countdown')  # 完整福袋详情倒计时
+            self.cut_pic(390, 1160, 1000, 1380, '', 'fudai_content', self.y_pianyi)  # 福袋内容详情
+            self.cut_pic(390, 1010, 690, 1120, '', 'fudai_countdown')  # 完整福袋详情倒计时
         else:
-            self.operation.cut_pic(
-                (390 * self.resolution_ratio_x // 1080, 1600 * self.resolution_ratio_y // 2400 + self.y_pianyi),
-                (1000 * self.resolution_ratio_x // 1080, 1760 * self.resolution_ratio_y // 2400 + self.y_pianyi), '',
-                'fudai_content')  # 福袋内容详情
-            self.operation.cut_pic((390 * self.resolution_ratio_x // 1080, 1470 * self.resolution_ratio_y // 2400),
-                         (690 * self.resolution_ratio_x // 1080, 1550 * self.resolution_ratio_y // 2400), '',
-                         'fudai_countdown')  # 完整福袋详情倒计时
+            self.cut_pic(390, 1600, 1000, 1820, '', 'fudai_content', self.y_pianyi)  # 福袋内容详情
+            self.cut_pic(390, 1460, 690, 1570, '', 'fudai_countdown')  # 完整福袋详情倒计时
         fudai_content_text = self.operation.analyse_pic_word('fudai_content', 1)
         print("福袋内容：{}".format(fudai_content_text))
         time_text = self.operation.analyse_pic_word('fudai_countdown', 2)
@@ -617,7 +601,7 @@ class fudai_analyse:
     def check_contain(self, contains=''):
         """检查福袋内容是否想要"""
         contains_not_want = []
-        contains_want = ["加固鱼护", "鱼竿", "钓箱", "钓杆", "鱼杆"]
+        contains_want = ["鱼竿", "钓箱", "钓杆", "钓竿"]
         if self.operation.get_current_hour() < 7:
             return False
         for contain in contains_want:
@@ -632,9 +616,7 @@ class fudai_analyse:
         """点击参与抽奖"""
         click_times = 0
         while click_times < 2:
-            self.operation.cut_pic((306 * self.resolution_ratio_x // 1080, 2030 * self.resolution_ratio_y // 2400),
-                         (780 * self.resolution_ratio_x // 1080, 2110 * self.resolution_ratio_y // 2400), '',
-                         "attend_button")  # 参与福袋抽奖的文字
+            self.cut_pic(306, 2030, 780, 2110, '', 'attend_button')  # 参与福袋抽奖的文字
             attend_button_text = self.operation.analyse_pic_word('attend_button', 1)
             print("参与抽奖按钮文字内容：{}".format(attend_button_text))
             if "参与成功" in attend_button_text:  # 如果识别到已经参与抽奖
@@ -670,10 +652,14 @@ class fudai_analyse:
                 print("点击福袋外部，关闭支付弹窗")
                 self.operation.delay(1)
                 return False
+            elif "开始观看" in attend_button_text:
+                self.click(500, 2060)  # 点击参与抽奖
+                print("点击参与抽奖")
+                return True
             elif "粉丝团" in attend_button_text:
                 self.click(500, 2060)  # 点击加入粉丝团、点亮粉丝团
                 self.operation.delay(2)
-                self.click(500, 470) # 点击刚才打开福袋的旁边位置
+                self.click(500, 470)  # 点击刚才打开福袋的旁边位置
                 print("点击福袋外部，关闭支付弹窗")
                 self.operation.delay(1)
                 click_times += 1
@@ -696,52 +682,35 @@ class fudai_analyse:
         print("参与抽奖多次点击失败")
         return False
 
-    def check_have_no_award(self):
-        """判定是否未中奖"""
+    def check_lucky_draw_result(self):
+        """判定福袋抽奖的结果"""
         self.operation.get_screenshot(self.device_id)
-        self.operation.cut_pic((357 * self.resolution_ratio_x // 1080, 658 * self.resolution_ratio_y // 2400),
-                     (740 * self.resolution_ratio_x // 1080, 750 * self.resolution_ratio_y // 2400), '',
-                     "choujiang_result")  # 没有抽中福袋位置
-        choujiang_result = self.operation.analyse_pic_word('choujiang_result', 1)
-        if "没有抽中" in choujiang_result:
-            return True
-        return False
-
-    def check_have_reward(self):
-        """判断是否中奖"""
-        path = os.path.dirname(__file__) + '/pic'
-        pic1_path = path + '/screenshot.png'
-        pic = Image.open(pic1_path)
-        # pic_new = Image.open(cut_pic_path)
-        pic_new = pic.convert('RGBA')
-        pix = pic_new.load()
-        y = 1238
-        if 253 <= pix[540 * self.resolution_ratio_x // 1080, 1238 * self.resolution_ratio_y // 2400][0] <= 255 and 43 <= \
-                pix[540 * self.resolution_ratio_x // 1080, 1238 * self.resolution_ratio_y // 2400][1] <= 45 and 84 <= \
-                pix[540 * self.resolution_ratio_x // 1080, 1238 * self.resolution_ratio_y // 2400][2] <= 86:
-            y = 1238
-        elif 253 <= pix[540 * self.resolution_ratio_x // 1080, 1290 * self.resolution_ratio_y // 2400][
-            0] <= 255 and 43 <= pix[540 * self.resolution_ratio_x // 1080, 1290 * self.resolution_ratio_y // 2400][
-            1] <= 45 and 84 <= pix[540 * self.resolution_ratio_x // 1080, 1290 * self.resolution_ratio_y // 2400][
-            2] <= 86:
-            y = 1290
-        self.operation.cut_pic((306 * self.resolution_ratio_x // 1080, (y + 10) * self.resolution_ratio_y // 2400),
-                     (780 * self.resolution_ratio_x // 1080, (y + 110) * self.resolution_ratio_y // 2400), '',
-                     "get_reward")  # 立即领取奖品
-        choujiang_result = self.operation.analyse_pic_word('get_reward', 1)
-        if "领取" in choujiang_result:
-            print("存在奖品")
-            return y + 200  # * self.resolution_ratio_y // 2400
+        self.cut_pic(350, 655, 740, 755, '', 'lucky_draw_result')  # 没有抽中福袋位置
+        lucky_draw_result = self.operation.analyse_pic_word('lucky_draw_result')
+        if "没有抽中" in lucky_draw_result:
+            self.cut_pic(340, 1200, 730, 1350, '', 'no_award_confirm')  # 我知道了按钮的位置
+            no_award_confirm = self.operation.analyse_pic_word('no_award_confirm')
+            if "我知道了" in no_award_confirm:
+                return 1
+            elif "领取并使用" in no_award_confirm:
+                return 2
+            return 3
+        elif "抽中福袋" in lucky_draw_result:
+            print("恭喜中奖了！")
+            y_value = [1438, 1490]
+            for y in y_value:
+                self.cut_pic(280, y - 30, 660, y + 30, '', 'have_read_user_agreement')  # 已经阅读并同意用户协议
+                have_read_user_agreement = self.operation.analyse_pic_word('have_read_user_agreement')
+                if "已阅读" in have_read_user_agreement:
+                    return y
         return False
 
     def check_have_reward_notice_confirm(self):
         """判断是否有领奖的二次确认提醒"""
         self.operation.get_screenshot(self.device_id)
-        self.operation.cut_pic((370 * self.resolution_ratio_x // 1080, 1350 * self.resolution_ratio_y // 2400),
-                     (680 * self.resolution_ratio_x // 1080, 1440 * self.resolution_ratio_y // 2400), '',
-                     "reward_notice_confirm")  # 提醒领取奖品的弹窗
-        choujiang_result = self.operation.analyse_pic_word('reward_notice_confirm', 1)
-        if "我知道了" in choujiang_result:
+        self.cut_pic(370, 1350, 680, 1440, '', 'reward_notice_confirm')  # 提醒领取奖品的弹窗
+        reward_notice_confirm = self.operation.analyse_pic_word('reward_notice_confirm', 1)
+        if "我知道了" in reward_notice_confirm:
             print("存在奖品领取提醒")
             return True
         return False
@@ -749,11 +718,9 @@ class fudai_analyse:
     def check_in_order_confirm_page(self):
         """判断是否在中奖下单后的购买成功的页面"""
         self.operation.get_screenshot(self.device_id)
-        self.operation.cut_pic((370 * self.resolution_ratio_x // 1080, 120 * self.resolution_ratio_y // 2400),
-                     (700 * self.resolution_ratio_x // 1080, 220 * self.resolution_ratio_y // 2400), '',
-                     "order_confirm")  # 提醒领取奖品的弹窗
-        choujiang_result = self.operation.analyse_pic_word('order_confirm', 1)
-        if "购买成功" in choujiang_result:
+        self.cut_pic(370, 120, 700, 220, '', 'order_confirm')  # 提醒领取奖品的弹窗
+        order_confirm = self.operation.analyse_pic_word('order_confirm')
+        if "购买成功" in order_confirm:
             print("福袋商品下单成功！")
             return True
         return False
@@ -765,20 +732,18 @@ class fudai_analyse:
         self.operation.delay(1)
         self.click(540, reward_y - 140)  # 点击领取
         print("勾选协议，点击领取奖品")
-        self.operation.delay(10)
-        # self.operation.save_reward_pic(self.device_id)
+        self.operation.delay(5)
         self.click(886, 2170)  # 点击下单
         print("点击下单")
         self.operation.delay(10)
         while self.check_in_order_confirm_page():
-            self.click(80, 180)  # 点击回退按钮
+            # self.click(80, 180)  # 点击回退按钮
+            self.operation.click_back(self.device_id)
             print("点击回退按钮")
             self.operation.delay(4)
-        # else:
-        #     self.operation.click_back(self.device_id)  # 下完单点击返回直播间
         print("下完单返回到直播间")
-        self.operation.delay(6)
-        if self.check_have_reward():
+        self.operation.delay(4)
+        if self.check_lucky_draw_result():
             print("领奖弹窗未关闭，点击关闭弹窗")
             self.click(540, reward_y + 180)
             print("点击坐标位置:540 {}关闭领奖弹窗".format((reward_y + 180) * self.resolution_ratio_y // 2400))
@@ -803,9 +768,7 @@ class fudai_analyse:
 
     def check_stop_charging(self):
         """针对vivo设备，判断长时间连接弹出停止充电的弹窗"""
-        self.operation.cut_pic((225 * self.resolution_ratio_x // 1080, 1951 * self.resolution_ratio_y // 2400),
-                               (865 * self.resolution_ratio_x // 1080, 2051 * self.resolution_ratio_y // 2400), '',
-                               "charging_stop_notice")  # 提醒领取奖品的弹窗
+        self.cut_pic(225, 1951, 865, 2051, '', 'charging_stop_notice')
         charging_stop_notice = self.operation.analyse_pic_word('charging_stop_notice')
         if "充电" in charging_stop_notice:
             print("设备弹出停止充电提醒！")
@@ -826,7 +789,7 @@ class fudai_analyse:
             current_hour = self.operation.get_current_hour()
             if 2 <= current_hour <= 6:
                 self.back_to_zhibo_list()
-                print("已经凌晨了，退出直播间回到直播列表，等待5个小时")
+                print("已经凌晨{}点了，退出直播间回到直播列表，等待5个小时".format(current_hour))
                 self.operation.delay(18000)
                 continue
             x = self.check_have_fudai()
@@ -837,8 +800,7 @@ class fudai_analyse:
                 continue
             if x and swipe_times < 17:
                 wait_times = 0
-                # self.operation.cut_pic((x, 400), (x + 90, 455))  # 通常小福袋的位置
-                self.click(x+45, 440)  # 点击默认小福袋的位置
+                self.click(x + 45, 440)  # 点击默认小福袋的位置
                 print("点击打开福袋详情")
                 self.operation.delay(3)
             elif needswitch:  # 如果福袋不存在，且需要切换直播间
@@ -891,7 +853,7 @@ class fudai_analyse:
             renwu = self.check_detail_height()
             fudai_content_text, time_text = self.get_fudai_contain(renwu)
             if self.check_contain(fudai_content_text) and needswitch:  # 如果福袋内容是不想要的
-                self.click(x+45, 470)  # 点击刚才打开小福袋的位置的旁边
+                self.click(x + 45, 470)  # 点击刚才打开小福袋的位置的旁边
                 print("点击小福袋位置，关闭福袋详情")
                 self.operation.delay(1)
                 self.swipe(760, 1600, 760, 800, 200)
@@ -913,16 +875,16 @@ class fudai_analyse:
                     lastsecond, future_timestamp = result
                 else:
                     fudai_not_open_times += 1
-                    self.click(x+45, 470)  # 点击刚才打开小福袋的位置的旁边
+                    self.click(x + 45, 470)  # 点击刚才打开小福袋的位置的旁边
                     print("第{}次打开福袋异常，点击小福袋旁边位置，坐标({},{})关闭福袋详情".format(fudai_not_open_times, (
-                                x + 45) * self.resolution_ratio_x // 1080, 470 * self.resolution_ratio_y // 2400))
+                            x + 45) * self.resolution_ratio_x // 1080, 470 * self.resolution_ratio_y // 2400))
                     if fudai_not_open_times > 10:
                         print("超过10次点击福袋无法打开详情，等待30分钟")
                         self.operation.delay(1800)
                     self.operation.delay(1)
                     continue
             if lastsecond < 15 and needswitch:  # 如果不到15秒了，就不点了
-                self.click(x+45, 470)  # 点击刚才打开小福袋的位置的旁边
+                self.click(x + 45, 470)  # 点击刚才打开小福袋的位置的旁边
                 print("点击小福袋位置，关闭福袋详情")
                 self.operation.delay(1)
                 if needswitch:
@@ -932,7 +894,7 @@ class fudai_analyse:
                 self.operation.delay(5)
                 continue
             if needswitch and lastsecond >= 60 * wait_minutes:  # 如果需要切换且倒计时时间大于设定的分钟
-                self.click(x+45, 470)  # 点击刚才打开小福袋的位置
+                self.click(x + 45, 470)  # 点击刚才打开小福袋的位置
                 print("点击小福袋位置，关闭福袋详情")
                 self.operation.delay(1)
                 self.swipe(760, 1600, 760, 800, 200)
@@ -946,21 +908,27 @@ class fudai_analyse:
                 swipe_times += 1
                 self.operation.delay(5)
                 continue
-            self.operation.delay(lastsecond)
-            no_award_result = self.check_have_no_award()
-            if no_award_result:
-                self.click(540, 1270)  # 点击我知道了
-                print("没有抽中，点击:我知道了,关闭弹窗")
-                self.operation.delay(5)
-                no_award_result = self.check_have_no_award()
-                if no_award_result:
-                    self.click(540, 1270)  # 点击我知道了
-                    print("再次点击:我知道了,关闭弹窗")
-                    self.operation.delay(5)
+            self.operation.delay(lastsecond+5)  # 比倒计时稍微多等待几秒
+            have_clicked_no_award = False
+            while True:
+                check_result = self.check_lucky_draw_result()
+                if check_result is False:  # 没有弹窗需要处理
+                    break
+                elif check_result in (1, 2, 3):  # 未中奖流程
+                    self.click(540, 1270)
+                    print("没有抽中，点击:我知道了,关闭弹窗")
+                    self.operation.delay(3)
+                    have_clicked_no_award = True
+                    if check_result == 2:  # 处理特殊状态（领取并使用）
+                        self.click(500, 470)  # 点击刚才打开福袋的旁边位置
+                        self.operation.delay(2)
+                else:  # 中奖流程（返回y坐标）
+                    print("检测到中奖结果，执行领奖流程")
+                    self.get_reward(check_result)
+                    continue
+            if have_clicked_no_award:  # 如果点击了没有中奖
                 if not needswitch:
-                    random_wait_min = random.randint(3, 8)
-                    print("等待{}分钟后继续".format(random_wait_min))
-                    self.operation.delay(60*random_wait_min)
+                    self.operation.random_delay(180, 450)
                     continue
                 else:
                     self.swipe(760, 1600, 760, 800, 200)
@@ -968,10 +936,6 @@ class fudai_analyse:
                     swipe_times += 1
                     self.operation.delay(5)
                     continue
-            reward_y = self.check_have_reward()
-            if reward_y:  # 如果是中奖了
-                self.get_reward(reward_y)
-                continue
             elif self.check_zhibo_is_closed():  # 如果是直播间关闭了
                 print("直播间已关闭，上划切换直播间")
                 swipe_times += 1
@@ -982,11 +946,9 @@ class fudai_analyse:
                 self.into_zhibo_from_list()
                 swipe_times = 0  # 滑动次数归0
                 continue
-            self.click(540, 1270)  # 点击我知道了
-            print("没有抽中，点击:我知道了,关闭弹窗")
-            self.operation.delay(10)
-            continue
 
 
 if __name__ == '__main__':
     douyin = fudai_analyse()
+
+
