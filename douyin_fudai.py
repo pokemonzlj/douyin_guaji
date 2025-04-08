@@ -341,7 +341,7 @@ class fudai_analyse:
             for x in range(41, 410):
                 if 194 <= \
                         pix[x * self.resolution_ratio_x // 1080, 403 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                            0] <= 200 and 187 <= \
+                            0] <= 200 and 180 <= \
                         pix[x * self.resolution_ratio_x // 1080, 403 * self.resolution_ratio_y // 2400 + self.y_pianyi][
                             1] <= 193 and 241 <= \
                         pix[x * self.resolution_ratio_x // 1080, 403 * self.resolution_ratio_y // 2400 + self.y_pianyi][
