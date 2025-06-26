@@ -4,6 +4,7 @@ import time
 from PIL import Image
 from datetime import datetime
 from Underlying_Operations import underlying_operations
+import json
 
 """
     版本更新日志
@@ -109,7 +110,13 @@ from Underlying_Operations import underlying_operations
     1.调整开奖后弹窗的点击判定，避免没有成功关闭弹窗的情况
     2.兼容开奖后没有中奖，但是给了会员专属优惠券的情况
     3.优化开奖后判定是否中奖及后续的逻辑
-
+    
+    V3.3
+    1.将哪些福袋想要、不想要的配置移动到json文件中进行
+    2.在关注列表页面补充一个vivo手机断开充电的判定
+    3.调整开奖后未中奖，但发了一张优惠券的处理逻辑
+    4.适当调大关键截图的区间，方便判定
+    
     未来更新
     1.获取直播间名字，关联奖品和倒计时，加入判定队列
     2.完全自动处理防沉迷验证
@@ -122,10 +129,30 @@ from Underlying_Operations import underlying_operations
     9.增加自动刷视频的功能，增加账号活跃度，提升中奖概率
     10.增加直播间互动的功能，增加账号活跃度，提升中奖概率
     11.处理异常操作导致弹窗：账号存在风险的验证
-    12.兼容IOS系统
-    13.不再需要填写偏移值等任何参数，直接运行，会自动找到合适的偏移值进行后续操作
-    14.调整页面判断逻辑，实时记录当前所在页面的类型（直接间、直播列表、个人中心、订单页等）
-    15.其他来自粉丝们需要的建议
+    12.兼容IOS系统，苹果手机也能挂机
+    13.其他来自粉丝们需要的建议
+    
+    V4.0(B站1.5W粉丝上线)
+    1.不再需要填写偏移值等任何参数，直接运行，会自动找到合适的偏移值进行后续操作
+    2.调整页面判断逻辑，实时记录当前所在页面的类型（直接间、直播列表、个人中心、订单页等）
+    3.优化是否有福袋的判定逻辑
+    4.重做福袋详情弹窗内容判定逻辑
+    5.大幅调整代码逻辑，优化代码结构和性能
+    6.增加参与抽奖文案为'不满足参与条件'的情况的处理
+    7.补充刷新直播间列表逻辑，避免过于频繁刷新直播间导致被风控
+    
+    V4.1
+    1.调整打开福袋详情判定异常后的关闭福袋弹窗位置，避免关闭弹窗实则是打开
+    2.调整参与抽奖内容为加入粉丝团（1钻石）的判定和处理逻辑
+    3.增加文件关闭机制，降低内存泄漏风险
+    4.修复在直播间判定是否存在福袋次数减少的问题
+    
+    V4.2
+    1.模拟用户操作，在直播间进行下单流程（创建订单但不付钱）
+    2.模拟用户操作，到停止挂机时间段退出抖音，到开始挂机时间再启动抖音
+    3.模拟用户操作，在视频首页刷一会视频，并随机点赞
+    4.优化是否存在福袋的逻辑，只检测固定间隔的位置
+    5.调整了凌晨关闭抖音后等待时长的逻辑，统一等待到8点继续挂机
     """
 
 class Tee(object):
@@ -148,8 +175,8 @@ class fudai_analyse:
     """福袋抽奖相关操作类"""
 
     def __init__(self):
-        self.device_id = 'XXXXXXXXXXX'
-        self.y_pianyi = 0
+        self.device_id = 'XXXXXXXXX'
+        self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
         self.resolution_ratio_x = 1080
         self.resolution_ratio_y = 2400
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
@@ -158,6 +185,18 @@ class fudai_analyse:
         self.last_find_fudai_time = 0.0
         self.last_refresh_zhibo_list_time = 0.0
         self.operation = underlying_operations()
+        self.config_path = "config.json"
+        self.contains_not_want = []
+        self.contains_want = []
+        self.load_config()
+
+    def load_config(self):
+        """从配置文件中加载数据"""
+        if os.path.exists(self.config_path):
+            with open(self.config_path, "r", encoding="utf-8") as file:
+                config = json.load(file)
+                self.contains_not_want = config.get("contains_not_want", [])
+                self.contains_want = config.get("contains_want", [])
 
     def deal_robot_pic_change_color(self):
         """处理人机验证的图片，转为黑白图"""
@@ -339,11 +378,11 @@ class fudai_analyse:
             pic_new = pic.convert('RGBA')
             pix = pic_new.load()
             for x in range(41, 410):
-                if 194 <= \
+                if 193 <= \
                         pix[x * self.resolution_ratio_x // 1080, 403 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                            0] <= 200 and 180 <= \
+                            0] <= 203 and 176 <= \
                         pix[x * self.resolution_ratio_x // 1080, 403 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                            1] <= 193 and 241 <= \
+                            1] <= 193 and 237 <= \
                         pix[x * self.resolution_ratio_x // 1080, 403 * self.resolution_ratio_y // 2400 + self.y_pianyi][
                             2] <= 247:  # 判定存在小福袋的图标
                     self.last_find_fudai_time = time.time()
@@ -454,7 +493,7 @@ class fudai_analyse:
         self.cut_pic(400, 145, 675, 230, '', 'zhibo_list_title')
         zhibo_list_title = self.operation.analyse_pic_word('zhibo_list_title')
         if "正在直播" in zhibo_list_title:
-            print("当前界面已经在直播间列表")
+            print("当前界面已经在关注的直播间列表")
             return True
         return False
 
@@ -599,17 +638,19 @@ class fudai_analyse:
         return fudai_content_text, time_text
 
     def check_contain(self, contains=''):
-        """检查福袋内容是否想要"""
-        contains_not_want = []
-        contains_want = ["鱼竿", "钓箱", "钓杆", "钓竿"]
-        if self.operation.get_current_hour() < 7:
+        """检查福袋内容是否是想要，从配置文件config中读取"""
+        if 0 < self.operation.get_current_hour() < 7:
+            print("凌晨不对福袋内容做要求")
             return False
-        for contain in contains_want:
+        for contain in self.contains_want:
             if contain in contains:
+                print("福袋内容是想要的")
                 return False
-        for contain in contains_not_want:
+        for contain in self.contains_not_want:
             if contain in contains:
+                print("福袋内容不是想要的")
                 return True
+        print("福袋内容未明确是否想要")
         return False
 
     def attend_choujiang(self):
@@ -800,7 +841,7 @@ class fudai_analyse:
                 continue
             if x and swipe_times < 17:
                 wait_times = 0
-                self.click(x + 45, 440)  # 点击默认小福袋的位置
+                self.click(x + 45, 430)  # 点击默认小福袋的位置
                 print("点击打开福袋详情")
                 self.operation.delay(3)
             elif needswitch:  # 如果福袋不存在，且需要切换直播间
@@ -852,8 +893,8 @@ class fudai_analyse:
             self.operation.get_screenshot(self.device_id)
             renwu = self.check_detail_height()
             fudai_content_text, time_text = self.get_fudai_contain(renwu)
-            if self.check_contain(fudai_content_text) and needswitch:  # 如果福袋内容是不想要的
-                self.click(x + 45, 470)  # 点击刚才打开小福袋的位置的旁边
+            if self.check_contain(fudai_content_text):  # 如果福袋内容是不想要的 and needswitch
+                self.click(x + 45, 430)  # 点击刚才打开小福袋的位置的旁边
                 print("点击小福袋位置，关闭福袋详情")
                 self.operation.delay(1)
                 self.swipe(760, 1600, 760, 800, 200)
@@ -875,16 +916,16 @@ class fudai_analyse:
                     lastsecond, future_timestamp = result
                 else:
                     fudai_not_open_times += 1
-                    self.click(x + 45, 470)  # 点击刚才打开小福袋的位置的旁边
+                    self.click(x + 45, 430)  # 点击刚才打开小福袋的位置的旁边
                     print("第{}次打开福袋异常，点击小福袋旁边位置，坐标({},{})关闭福袋详情".format(fudai_not_open_times, (
-                            x + 45) * self.resolution_ratio_x // 1080, 470 * self.resolution_ratio_y // 2400))
+                            x + 45) * self.resolution_ratio_x // 1080, 430 * self.resolution_ratio_y // 2400))
                     if fudai_not_open_times > 10:
                         print("超过10次点击福袋无法打开详情，等待30分钟")
                         self.operation.delay(1800)
                     self.operation.delay(1)
                     continue
             if lastsecond < 15 and needswitch:  # 如果不到15秒了，就不点了
-                self.click(x + 45, 470)  # 点击刚才打开小福袋的位置的旁边
+                self.click(x + 45, 430)  # 点击刚才打开小福袋的位置的旁边
                 print("点击小福袋位置，关闭福袋详情")
                 self.operation.delay(1)
                 if needswitch:
@@ -894,7 +935,7 @@ class fudai_analyse:
                 self.operation.delay(5)
                 continue
             if needswitch and lastsecond >= 60 * wait_minutes:  # 如果需要切换且倒计时时间大于设定的分钟
-                self.click(x + 45, 470)  # 点击刚才打开小福袋的位置
+                self.click(x + 45, 430)  # 点击刚才打开小福袋的位置
                 print("点击小福袋位置，关闭福袋详情")
                 self.operation.delay(1)
                 self.swipe(760, 1600, 760, 800, 200)
@@ -908,7 +949,7 @@ class fudai_analyse:
                 swipe_times += 1
                 self.operation.delay(5)
                 continue
-            self.operation.delay(lastsecond+5)  # 比倒计时稍微多等待几秒
+            self.operation.delay(lastsecond+5)  # 比倒计时稍微多等待5秒
             have_clicked_no_award = False
             while True:
                 check_result = self.check_lucky_draw_result()
@@ -920,7 +961,8 @@ class fudai_analyse:
                     self.operation.delay(3)
                     have_clicked_no_award = True
                     if check_result == 2:  # 处理特殊状态（领取并使用）
-                        self.click(500, 470)  # 点击刚才打开福袋的旁边位置
+                        print("未中奖点击了优惠券‘领取并使用’按钮，点击外部关闭商品浏览弹窗")
+                        self.click(x, 380)  # 点击刚才打开福袋的上方位置
                         self.operation.delay(2)
                 else:  # 中奖流程（返回y坐标）
                     print("检测到中奖结果，执行领奖流程")
