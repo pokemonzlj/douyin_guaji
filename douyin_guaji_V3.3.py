@@ -1,4 +1,4 @@
-from douyin_fudai import fudai_analyse
+from douyin_fudai_V3.3 import fudai_analyse
 
 class fudai_guaji:
     def __init__(self):
@@ -16,3 +16,4 @@ class fudai_guaji:
 if __name__ == '__main__':
     choujiang = fudai_guaji()
     choujiang.guaji(0)  # 运行只需改这里的0，对应是你手机纵轴y的偏移值
+
