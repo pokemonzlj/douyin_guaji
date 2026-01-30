@@ -1,0 +1,1105 @@
+import os
+import sys
+import time
+from PIL import Image
+from datetime import datetime
+from Underlying_Operations import underlying_operations
+import json
+
+"""
+    V4.0版本 
+    """
+
+class Tee(object):
+    """重写print的函数"""
+
+    def __init__(self, *files):
+        self.files = files
+
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+            f.flush()
+
+    def flush(self):
+        for f in self.files:
+            f.flush()
+
+
+class fudai_analyse:
+    """福袋抽奖相关操作类"""
+
+    def __init__(self):
+        self.device_id = 'XXXXXXXX'
+        self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
+        self.resolution_ratio_x = 1080
+        self.resolution_ratio_y = 2340
+        timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
+        log_file = open(timepic + '.log', 'w')
+        sys.stdout = Tee(sys.stdout, log_file)
+        self.last_find_fudai_time = 0.0
+        self.last_refresh_zhibo_list_time = 0.0
+        self.operation = underlying_operations()
+        self.config_path = "config.json"
+        self.contains_not_want = []
+        self.contains_want = []
+        self.load_config()
+        self.current_page_type = 1
+        self.page_name = {1: "直播间页", 2: "关注的正在直播列表页", 3: "个人中心关注页", 4: "订单支付完成页",
+                          5: "首页-个人中心", 6: "首页-内容推荐", 7: "下单页"}
+
+    def load_config(self):
+        """从配置文件中加载数据"""
+        if os.path.exists(self.config_path):
+            with open(self.config_path, "r", encoding="utf-8") as file:
+                config = json.load(file)
+                self.contains_not_want = config.get("contains_not_want", [])
+                self.contains_want = config.get("contains_want", [])
+
+    def deal_robot_pic_change_color(self):
+        """处理人机验证的图片，转为黑白图"""
+        self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
+        path = os.path.dirname(__file__) + '/pic/save'
+        pic = path + '/robot_verification.png'
+        img = Image.open(pic)
+        img = img.convert('RGB')
+        width, height = img.size
+        for x in range(5, width - 40):
+            for y in range(20, height - 30):
+                current_color = img.getpixel((x, y))
+                if current_color[0] > 240 and current_color[1] > 240 and current_color[2] > 240:
+                    img.putpixel((x, y), (255, 255, 255))  # 白色
+                elif current_color[0] < 35 and current_color[1] < 20 and current_color[2] < 20:
+                    img.putpixel((x, y), (0, 0, 0))  # 白色
+                else:
+                    img.putpixel((x, y), (128, 128, 128))  # 黑色
+        save_pic = path + '/robot_verification_new.png'
+        img.save(save_pic)
+
+    def check_robot_pic_distance(self):
+        """处理人机验证的图片"""
+        self.cut_pic(143, 884, 936, 1380, '', 'robot_verification')
+        path = os.path.dirname(__file__) + '/pic'
+        pic = path + '/robot_verification.png'
+        img = Image.open(pic)
+        img = img.convert('RGB')
+        width, height = img.size
+        printed_first_result = False  # 用于记录第一个结果是否已经输出过
+        printed_second_result = False  # 用于记录第二个结果是否已经输出过
+        for y in range(20, height - 30):
+            for x in range(5, width - 40):
+                current_color = img.getpixel((x, y))
+                if current_color[0] > 240 and current_color[1] > 240 and current_color[2] > 240:
+                    if not printed_first_result:  # 确保只输出一次第一个结果
+                        print(x, y)
+                        printed_first_result = True
+                    break
+            if printed_first_result:  # 如果已经输出过第一个结果，则退出外层循环
+                break
+        for x1 in range(x, width - 40):
+            current_color = img.getpixel((x1, y))
+            if current_color[0] < 50 and current_color[1] < 55 and current_color[2] < 85 and current_color[0] + \
+                    current_color[1] + current_color[2] < 150:
+                if not printed_second_result:  # 确保只输出一次第二个结果
+                    print(x1, y)
+                    printed_second_result = True
+                print("需要滑动的距离为{}".format(x1 - x))
+                return x1 - x
+
+    def deal_robot_pic(self):
+        """处理人机验证的图片"""
+        self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
+        path = os.path.dirname(__file__) + '/pic/save'
+        pic = path + '/robot_verification.png'
+        img = Image.open(pic)
+        img = img.convert('RGB')
+        width, height = img.size
+        threshold = 90  # 阈值，用于判断颜色偏差是否较大
+        for x in range(5, width - 40):
+            for y in range(20, height - 30):
+                # 获取当前像素点的颜色
+                if x > 5 and y > 20 and x < width - 40 and y < height - 30:  # 跳过图片边沿的像素点
+                    # 获取当前像素点的颜色
+                    current_color = img.getpixel((x, y))
+                    # if len(current_color) != 3:
+                    #     raise ValueError(f"Invalid color format at ({x}, {y}): {current_color}")
+                    #     # 获取周围像素点的颜色
+                    num_deviant_neighbors = 0
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            if 0 <= x + dx < width and 0 <= y + dy < height:  # 确保不超出图像边界
+                                neighbor_color = img.getpixel((x + dx, y + dy))
+                                if isinstance(neighbor_color, tuple) and len(neighbor_color) == 3:  # 检查颜色格式
+                                    neighbor_color = tuple(
+                                        min(max(int(c), 0), 255) for c in neighbor_color)  # 确保颜色值在0到255之间
+                                    channel_diffs = [abs(a - b) for a, b in zip(current_color, neighbor_color)]
+                                    # 如果每个通道的偏差都大于30，则将邻居像素点计数为偏差点
+                                    if all(diff > 70 for diff in channel_diffs):
+                                        num_deviant_neighbors += 1
+                                    # color_diff = sum(abs(a - b) for a, b in zip(current_color, neighbor_color))
+                                    # if color_diff > threshold:
+                                    #     num_deviant_neighbors += 1
+                    # 如果偏差大于阈值的邻居数量大于4，则认为是偏差点
+                    if num_deviant_neighbors > 3:
+                        img.putpixel((x, y), (255, 255, 255))  # 白色
+                    else:
+                        img.putpixel((x, y), (0, 0, 0))  # 黑色
+        save_pic = path + '/robot_verification_new.png'
+        img.save(save_pic)
+
+    def check_detail_height(self):
+        """判定福袋弹窗的高度，会因为抽奖所需任务不同稍有区别,分别有不要任务、1/2/3个任务"""
+        path = os.path.dirname(__file__) + '/pic'
+        pic1_path = path + '/screenshot.png'
+        pic = Image.open(pic1_path)
+        pic_new = pic.convert('RGBA')
+        pix = pic_new.load()
+        # 定义任务位置和对应的任务数量
+        task_positions = [
+            (883, 3),  # 3个任务的位置
+            (983, 2),  # 2个任务的位置
+            (1058, 1)  # 1个任务的位置
+        ]
+        # 检查颜色是否匹配
+        def check_color(x, y):
+            return (30 <= pix[x, y][0] <= 38 and 
+                   34 <= pix[x, y][1] <= 40 and 
+                   78 <= pix[x, y][2] <= 84)
+        # 检查指定位置的任务
+        def check_task_position(base_y, task_count):
+            x = 536 * self.resolution_ratio_x // 1080
+            y = base_y * self.resolution_ratio_y // 2400
+            
+            # 检查三种偏移值的情况
+            for offset in [0, self.y_pianyi, -self.y_pianyi]:
+                y_offset = (base_y + offset) * self.resolution_ratio_y // 2400
+                if check_color(x, y_offset):
+                    print(f'参与抽奖有{task_count}个任务')
+                    return task_count
+            return None
+        # 检查所有任务位置
+        for base_y, task_count in task_positions:
+            result = check_task_position(base_y, task_count)
+            if result is not None:
+                return result
+        # 检查是否是人机验证
+        if self.check_have_robot_analyse():
+            self.deal_robot_analyse()
+        print('参与抽奖不需要任务')
+        return 0
+
+    def check_fudai_detail_height(self):
+        """判定福袋弹窗的高度，会因为抽奖所需任务不同稍有区别,分别有不要任务、1/2/3个任务"""
+        task_positions = [
+            (1100, 1),  # 1个任务的位置-商品描述1行
+            (1060, 2),  # 1个任务的位置-商品描述2行,当做2个任务
+            (1030, 2),  # 2个任务的位置
+            (935, 3)  # 3个任务的位置
+        ]
+
+        def check_super_fudai(base_y, task_count):
+            self.cut_pic(405, base_y, 670, base_y+90, '', 'super_fudai')
+            super_fudai = self.operation.analyse_pic_word('super_fudai')
+            if "超级福袋" in super_fudai:
+                print(f'参与抽奖有{task_count}个任务')
+                return task_count
+
+        for base_y, task_count in task_positions:
+            for offset in [0, self.y_pianyi, -self.y_pianyi]:
+                base_y += offset
+                result = check_super_fudai(base_y, task_count)
+                if result is not None:
+                    return result
+        # 检查是否是人机验证
+        if self.check_have_robot_analyse():
+            self.deal_robot_analyse()
+        print('参与抽奖不需要任务')
+        return 0
+
+
+    def find_y_offset(self):
+        """查找设备对应的偏移值"""
+        print("开始自动寻找合适的y轴偏移值...")
+        test_offsets = range(0, 51, 2)  # 从0到50，步长为2
+        self.operation.get_screenshot(self.device_id)
+        matched_offsets = []  # 存储所有匹配的偏移值
+        consecutive_failures = 0  # 连续失败次数
+        found_first_match = False  # 是否找到第一个匹配值
+        
+        for offset in test_offsets:
+            for test_offset in [offset, -offset]:  # 测试正负两个值
+                self.cut_pic(70, 2166+test_offset, 240, 2208+test_offset, '', 'say_something')
+                matched = False
+                for loop in range(2):
+                    for i in [0, 2]:
+                        say_something = self.operation.analyse_pic_word('say_something', i)
+                        if "说点" in say_something:  # 说点什么
+                            matched = True
+                            if test_offset == 0:
+                                print("偏移值为0")
+                                return 0
+                            matched_offsets.append(test_offset)
+                            consecutive_failures = 0  # 重置连续失败计数
+                            if not found_first_match:
+                                found_first_match = True
+                            break
+                    if matched:
+                        break
+                    self.operation.delay(0.1)
+                
+                if not matched:
+                    if found_first_match:  # 只有在找到第一个匹配值后才开始计数连续失败
+                        consecutive_failures += 1
+                        if consecutive_failures >= 3:  # 如果连续3次都不匹配
+                            if matched_offsets:  # 如果有匹配的值
+                                avg_offset = round(sum(matched_offsets) / len(matched_offsets))
+                                print(f"找到多个可能的偏移值，取平均值：{avg_offset}")
+                                return int(avg_offset)
+                            else:
+                                print("界面未在直播间或未找到合适的偏移值,请联系叼哥处理")
+                                return 0
+                            
+        # 如果遍历完所有值
+        if matched_offsets:
+            avg_offset = round(sum(matched_offsets) / len(matched_offsets))
+            print(f"找到多个可能的偏移值，取平均值：{avg_offset}")
+            return int(avg_offset)
+        else:
+            print("界面未在直播间或未找到合适的偏移值,请联系叼哥处理")
+            return 0
+
+    def check_have_fudai(self):
+        """判定直播页面福袋的小图标是否存在
+        Returns:
+            int or False: 如果找到福袋，返回x坐标；否则返回False
+        """
+        path = os.path.dirname(__file__) + '/pic'
+        pic1_path = path + '/screenshot.png'
+        max_loops = 6  # 最大循环次数
+        check_interval = 1.5  # 检查间隔时间
+        for loop in range(max_loops):
+            self.operation.delay(check_interval)
+            self.operation.get_screenshot(self.device_id)
+            pic = Image.open(pic1_path)
+            pic_new = pic.convert('RGBA')
+            pix = pic_new.load()
+            # 定义颜色范围
+            color_ranges = {
+                'r': (193, 203),
+                'g': (172, 193),
+                'b': (235, 247)
+            }
+            # 检查每个x坐标
+            for x in range(41, 410):
+                x_pos = x * self.resolution_ratio_x // 1080
+                
+                # 检查三种偏移值的情况
+                for y_offset in [0, self.y_pianyi, -self.y_pianyi]:
+                    y_pos = (403 + y_offset) * self.resolution_ratio_y // 2400
+                    pixel_color = pix[x_pos, y_pos]
+                    # 检查颜色是否在指定范围内
+                    if (color_ranges['r'][0] <= pixel_color[0] <= color_ranges['r'][1] and
+                        color_ranges['g'][0] <= pixel_color[1] <= color_ranges['g'][1] and
+                        color_ranges['b'][0] <= pixel_color[2] <= color_ranges['b'][1]):
+                        self.last_find_fudai_time = time.time()
+                        if y_offset != 0 and y_offset != self.y_pianyi:
+                            self.y_pianyi = y_offset
+                            print(f"重新调整偏移值到{y_offset}")
+                        return x
+            # 处理特殊情况
+            if loop >= 4:
+                self.deal_robot_analyse()
+            elif loop < 2 and self.check_zhibo_is_closed():
+                return False
+        return False
+
+    def cut_pic(self, x_top=1, y_top=1, x_bottom=2, y_bottom=2, target='', cut_pic_name=''):
+        """裁剪图片方法"""
+        self.operation.cut_pic(
+            (x_top * self.resolution_ratio_x // 1080, y_top * self.resolution_ratio_y // 2400),
+            (x_bottom * self.resolution_ratio_x // 1080, y_bottom * self.resolution_ratio_y // 2400),
+            target,
+            cut_pic_name)
+
+    def check_have_robot_analyse(self):
+        """检查是否存在人机校验"""
+        self.cut_pic(130, 790, 680, 870, '', 'zhibo_yanzheng')
+        result = self.operation.analyse_pic_word('zhibo_yanzheng', 1)
+        if "验证" in result:
+            print("存在滑动图片人机校验，需要等待完成验证.")
+            return 1
+        elif "形状相同" in result:
+            print("存在点击图片人机校验，需要等待完成验证.")
+            return 2
+        self.cut_pic(340, 1415, 700, 1518, '', 'zhibo_yanzheng')
+        result = self.operation.analyse_pic_word('zhibo_yanzheng')
+        if "开始检测" in result:
+            print("存在人脸识别人机校验，需要等待完成验证.")
+            return 3
+        return False
+
+    def deal_swipe_robot_analyse(self, distance=400):
+        """处理滑动图片的人机验证"""
+        if distance:
+            targetx = (222 + distance) * self.resolution_ratio_x // 1080
+        else:
+            targetx = 622 * self.resolution_ratio_x // 1080
+        self.swipe(222, 1444, targetx, 1444, 300)
+        print("滑轨滑动{}距离解锁人机验证".format(distance))
+        self.operation.delay(1)
+
+    def deal_robot_analyse(self):
+        """处理人机校验，包含各种情况
+        
+        处理三种类型的人机验证：
+        1. 滑动图片验证
+        2. 点击图片验证
+        3. 人脸识别验证
+        
+        Returns:
+            bool: 是否成功处理了人机验证
+        """
+        max_swipe_times = 10
+        wait_time = 1800  # 30分钟等待时间
+        
+        def handle_slide_verification():
+            """处理滑动图片验证"""
+            distance = self.check_robot_pic_distance()
+            self.deal_swipe_robot_analyse(distance)
+            self.operation.delay(10)
+            self.operation.get_screenshot(self.device_id)
+            
+        def handle_click_verification():
+            """处理点击图片验证"""
+            print("无法处理图片验证的人机，点击关闭退出验证，等待30分钟")
+            self.click(910, 800)  # 点击关闭
+            self.operation.delay(wait_time)
+            
+        def handle_face_verification():
+            """处理人脸识别验证"""
+            print("无法处理人脸识别验证的人机，点击返回退出验证，等待30分钟")
+            self.operation.click_back(self.device_id)
+            self.operation.delay(2)
+            self.operation.click_back(self.device_id)
+            self.operation.delay(wait_time)
+            
+        # 验证处理映射
+        verification_handlers = {
+            1: handle_slide_verification,
+            2: handle_click_verification,
+            3: handle_face_verification
+        }
+        
+        for swipe_times in range(max_swipe_times):
+            robot_result = self.check_have_robot_analyse()
+            
+            # 如果没有验证，直接返回
+            if not robot_result:
+                return True
+                
+            # 获取对应的处理函数并执行
+            handler = verification_handlers.get(robot_result)
+            if handler:
+                handler()
+                if robot_result in (2, 3):  # 如果是无法处理的验证类型，直接退出
+                    return False
+            else:
+                return False
+                
+        # 如果超过最大尝试次数，按点击验证处理
+        print("无法处理图片验证的人机，点击关闭退出验证，等待30分钟")
+        self.click(910, 800)
+        self.operation.delay(wait_time)
+        return False
+
+    def swipe(self, left_up_x=0, left_up_y=0, right_down_x=1080, right_down_y=1500, steps=200):
+        """调整比例后划动屏幕"""
+        left_up_x = left_up_x * self.resolution_ratio_x // 1080
+        right_down_x = right_down_x * self.resolution_ratio_x // 1080
+        left_up_y = left_up_y * self.resolution_ratio_y // 2400
+        right_down_y = right_down_y * self.resolution_ratio_y // 2400
+        self.operation.swipe(self.device_id, left_up_x, left_up_y, right_down_x, right_down_y, steps)
+
+    def click(self, x=500, y=500):
+        """调整比例后点击坐标位置"""
+        x = x * self.resolution_ratio_x // 1080
+        y = y * self.resolution_ratio_y // 2400
+        self.operation.click(self.device_id, x, y)
+
+    def reflash_zhibo(self):
+        """在关注列表，下拉刷新直播间"""
+        current_time = time.time()
+        wait_time = current_time - self.last_refresh_zhibo_list_time
+        wait_time = round(wait_time, 1)
+        if wait_time > 600:
+            print("下划刷新直播间列表")
+            self.swipe(760, 700, 760, 1500)
+            self.last_refresh_zhibo_list_time = time.time()
+            self.operation.delay(5)
+            return True
+        print("10分钟内已刷新过直播间列表，不再刷新")
+        return False
+
+    def check_in_follow_list(self):
+        """判断是否界面在我的关注的列表页"""
+        self.cut_pic(244, 130, 875, 220, '', 'zhibo_follow_list')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_follow_list')
+        if "关注" in zhibo_list_title:
+            print("当前界面在用户关注列表")
+            return True
+        return False
+
+    def check_in_zhibo_list(self):
+        """检查是否当前在关注的直播列表"""
+        self.cut_pic(400, 145, 675, 230, '', 'zhibo_list_title')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_list_title')
+        if "正在直播" in zhibo_list_title:
+            print("当前界面已经在关注的直播间列表")
+            return True
+        return False
+
+    def check_zhibo_is_closed(self):
+        """检查当前直播间是否关闭"""
+        self.cut_pic(350, 100, 740, 300, '', 'zhibo_status')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_status')
+        if "已结束" in zhibo_list_title:
+            print("当前直播间已关闭")
+            return True
+        print("当前直播间正常进行中")
+        return False
+
+    def check_zhibo_is_closed_guess_whatyoulike(self):
+        """检查当前直播间是否关闭-判断猜你喜欢的位置"""
+        self.cut_pic(440, 1570, 640, 1640, '', 'zhibo_status')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_status', 1)
+        if "猜你喜欢" in zhibo_list_title:
+            print("当前直播间已关闭")
+            return True
+        return False
+
+    def back_to_zhibo_list(self):
+        """功能初始化，回到直播间列表"""
+        click_back_times = 0
+        while click_back_times < 4:
+            self.operation.get_screenshot(self.device_id)
+            if self.check_in_zhibo_list():
+                return False
+            elif self.check_in_follow_list():
+                self.click(390, 590)
+                print("点击打开直播间的列表")
+                self.operation.delay(2)
+                return False
+            self.operation.click_back(self.device_id)
+            self.operation.delay(2)
+            click_back_times += 1
+
+    def into_zhibo_from_list(self):
+        """从直播列表进入直播间"""
+        while True:
+            self.operation.get_screenshot(self.device_id)
+            if self.check_in_zhibo_list():
+                current_hour = self.operation.get_current_hour()
+                if 2 <= current_hour <= 6:
+                    print("等待10分钟继续检查")
+                    self.operation.delay(600)  # 等待10分钟继续检查
+                else:
+                    if self.reflash_zhibo():  # 刷新直播间列表
+                        if current_hour > 7:  # 如果当前时间已经早上8点多了，一定有直播间了
+                            self.click(290, 490)  # 点击第一个直播间
+                            print("点击打开第一个直播间")
+                            break  # 跳出循环，直播间已找到
+                        elif self.check_zhibo_list_have_zhibo():  # 如果存在直播间
+                            self.click(290, 490)  # 点击第一个直播间
+                            print("点击打开第一个直播间")
+                            break
+                        else:  # 如果直播列表是空的，则退出到关注列表
+                            self.operation.click_back(self.device_id)
+                            self.operation.delay(3)
+                            print("点击退出到关注列表")
+                    else:
+                        self.click(810, 490)  # 点击第一个直播间
+                        print("点击打开第2个直播间")
+                        break
+            elif self.check_zhibo_have_popup():
+                self.click(540, 1620)
+                print("点击关闭红包弹窗")
+                self.operation.click_back(self.device_id)
+                self.operation.delay(3)
+                print("点击退出直播间")
+            elif self.check_zhibo_is_closed():
+                self.operation.click_back(self.device_id)
+                self.operation.delay(3)
+                print("点击退出直播间")
+            elif self.check_in_follow_list():
+                self.click(390, 590)
+                print("点击打开直播间的列表")
+                self.operation.delay(2)
+            else:
+                print("当前页面不在直播间")
+                self.operation.delay(600)  # 等待10分钟继续检查
+                print("等待10分钟后再检查")
+
+    def check_zhibo_list_have_zhibo(self):
+        """检查直播列表是否存在直播的内容"""
+        self.operation.get_screenshot(self.device_id)
+        path = os.path.dirname(__file__) + '/pic'
+        pic1_path = path + '/screenshot.png'
+        pic = Image.open(pic1_path)
+        # pic_new = Image.open(cut_pic_path)
+        pic_new = pic.convert('RGBA')
+        pix = pic_new.load()
+        if pix[290 * self.resolution_ratio_x // 1080, 490 * self.resolution_ratio_y // 2400][0] == 255 and \
+                pix[290 * self.resolution_ratio_x // 1080, 490 * self.resolution_ratio_y // 2400][1] == 255 and \
+                pix[290 * self.resolution_ratio_x // 1080, 490 * self.resolution_ratio_y // 2400][2] == 255:
+            print('直播间列表为空')
+            return False
+        print('直播间列表存在直播的内容')
+        return True
+
+    def check_zhibo_have_popup(self):
+        """判断直播间是否弹出了节假日红包弹窗"""
+        self.cut_pic(425, 880, 660, 960, '', 'zhibo_hongbao')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_hongbao', 1)
+        if "最高金额" in zhibo_list_title:
+            print("直播间有红包弹窗")
+            return True
+        return False
+
+    def check_no_fudai_time(self):
+        """无福袋等待时间检查"""
+        if 3 <= self.operation.get_current_hour() <= 6:  # 如果是凌晨3-6点
+            self.last_find_fudai_time = 0.00
+        elif self.last_find_fudai_time == 0.00 or self.last_find_fudai_time == 0:  # 如果过了不挂机时间，把当前时间赋值给上次找到福袋的时间
+            self.last_find_fudai_time = time.time()
+        if self.last_find_fudai_time > 0:
+            current_time = time.time()
+            wait_time = current_time - self.last_find_fudai_time
+            wait_time = round(wait_time, 1)
+            if wait_time > 18000:
+                self.last_find_fudai_time = 0.00  # 重置找到福袋的时间
+                wait_time = 0
+            if wait_time > 1:
+                print("距离上一次识别到福袋已经过去{}秒".format(wait_time))
+            return wait_time
+        return 0
+
+    def get_fudai_contain(self, renwu=2):
+        """获取福袋的内容和倒计时
+        Returns:
+            tuple: (fudai_content_text, time_text)
+        """
+        # 定义不同任务数量对应的截图参数
+        task_params = {
+            1: {'content': (390, 1300, 1000, 1520), 'countdown': (390, 1180, 690, 1290)},
+            2: {'content': (390, 1240, 1000, 1460), 'countdown': (390, 1110, 690, 1220)},
+            3: {'content': (390, 1160, 1000, 1380), 'countdown': (390, 1010, 690, 1120)},
+            0: {'content': (390, 1600, 1000, 1820), 'countdown': (390, 1460, 690, 1570)}
+        }
+        
+        # 获取对应任务数量的参数
+        params = task_params.get(renwu, task_params[2])  # 默认使用2个任务的参数
+        
+        # 截取福袋内容
+        content_params = params['content']
+        self.cut_pic(content_params[0], content_params[1] + self.y_pianyi, 
+                    content_params[2], content_params[3] + self.y_pianyi, 
+                    '', 'fudai_content')
+        
+        # 截取倒计时
+        countdown_params = params['countdown']
+        self.cut_pic(countdown_params[0], countdown_params[1] + self.y_pianyi,
+                    countdown_params[2], countdown_params[3] + self.y_pianyi,
+                    '', 'fudai_countdown')
+        
+        # 识别文本
+        fudai_content_text = self.operation.analyse_pic_word('fudai_content', 1)
+        time_text = self.operation.analyse_pic_word('fudai_countdown', 2)
+        
+        print(f"福袋内容：{fudai_content_text}")
+        print(f"倒计时时间：{time_text}")
+        
+        return fudai_content_text, time_text
+
+    def check_contain(self, contains='', current_hour=None):
+        """检查福袋内容是否是想要，从配置文件config中读取"""
+        if current_hour is None:
+            current_hour = self.operation.get_current_hour()
+        if 0 < current_hour < 7:
+            print("凌晨不对福袋内容做要求")
+            return False
+        for contain in self.contains_want:
+            if contain in contains:
+                print("福袋内容是想要的")
+                return False
+        for contain in self.contains_not_want:
+            if contain in contains:
+                print("福袋内容不是想要的")
+                return True
+        print("福袋内容未明确是否想要")
+        return False
+
+    def attend_choujiang(self):
+        """点击参与抽奖
+        Returns:
+            bool: 是否成功参与抽奖
+        """
+        def close_fudai_detail():
+            """关闭福袋详情"""
+            self.click(500, 470)
+            print("点击福袋外部，关闭福袋详情")
+            self.operation.delay(1)
+            
+        def handle_special_buttons():
+            """处理特殊按钮情况"""
+            if "加入粉丝团(1钻石)" in attend_button_text:
+                close_fudai_detail()
+                return False
+            elif "活动已结束" in attend_button_text:
+                close_fudai_detail()
+                return False
+            elif "开通店铺会员" in attend_button_text:
+                self.operation.click_back(self.device_id)
+                self.operation.delay(1)
+                close_fudai_detail()
+                return False
+            return None
+            
+        def handle_participation_buttons():
+            """处理参与按钮情况"""
+            if "评论" in attend_button_text or "参与抽奖" in attend_button_text:
+                self.click(500, 2060)
+                print("点击参与抽奖")
+                return True
+            elif "开始观看" in attend_button_text:
+                self.click(500, 2060)
+                print("点击开始观看直播，参与抽奖")
+                return True
+            elif "粉丝团" in attend_button_text:
+                self.click(500, 2060)
+                print("点击加入粉丝团、点亮粉丝团")
+                self.operation.delay(2)
+                close_fudai_detail()
+                return False
+            return None
+            
+        def handle_status_buttons():
+            """处理状态按钮情况"""
+            if "参与成功" in attend_button_text:
+                print("已经参与，等待开奖")
+                close_fudai_detail()
+                return True
+            elif "还需看播" in attend_button_text:
+                print("已经参与，等待看播时间凑齐开奖")
+                close_fudai_detail()
+                return True
+            elif "无法参与" in attend_button_text:
+                print("条件不满足，无法参与抽奖")
+                close_fudai_detail()
+                return False
+            elif "时长不足" in attend_button_text:
+                print("看播时长不够了，无法参与抽奖")
+                close_fudai_detail()
+                return False
+            elif "不满足参与条件" in attend_button_text:
+                print("不满足参与条件，无法参与抽奖")
+                close_fudai_detail()
+                return False
+            return None
+
+        click_times = 0
+        while click_times < 2:
+            self.cut_pic(306, 2030, 780, 2110, '', 'attend_button')
+            attend_button_text = self.operation.analyse_pic_word('attend_button', 1)
+            print(f"参与抽奖按钮文字内容：{attend_button_text}")
+            
+            # 处理特殊按钮情况
+            result = handle_special_buttons()
+            if result is not None:
+                return result
+                
+            # 处理参与按钮情况
+            result = handle_participation_buttons()
+            if result is not None:
+                return result
+                
+            # 处理状态按钮情况
+            result = handle_status_buttons()
+            if result is not None:
+                return result
+                
+            # 未匹配到任何情况
+            print("参与抽奖按钮文字没匹配上")
+            click_times += 1
+            
+        print("参与抽奖多次点击失败")
+        return False
+
+    def check_lucky_draw_result(self):
+        """判定福袋抽奖的结果"""
+        self.operation.get_screenshot(self.device_id)
+        self.cut_pic(350, 655, 740, 755, '', 'lucky_draw_result')  # 没有抽中福袋位置
+        lucky_draw_result = self.operation.analyse_pic_word('lucky_draw_result')
+        if "没有抽中" in lucky_draw_result:
+            self.cut_pic(340, 1200, 730, 1350, '', 'no_award_confirm')  # 我知道了按钮的位置
+            no_award_confirm = self.operation.analyse_pic_word('no_award_confirm')
+            if "我知道了" in no_award_confirm:
+                return 1
+            elif "领取并使用" in no_award_confirm:
+                return 2
+            return 3
+        elif "抽中福袋" in lucky_draw_result:
+            print("恭喜中奖了！")
+            y_value = [1438, 1490]
+            for y in y_value:
+                self.cut_pic(280, y - 30, 660, y + 30, '', 'have_read_user_agreement')  # 已经阅读并同意用户协议
+                have_read_user_agreement = self.operation.analyse_pic_word('have_read_user_agreement')
+                if "已阅读" in have_read_user_agreement:
+                    return y
+        return False
+
+    def check_have_reward_notice_confirm(self):
+        """判断是否有领奖的二次确认提醒"""
+        self.operation.get_screenshot(self.device_id)
+        self.cut_pic(370, 1350, 680, 1440, '', 'reward_notice_confirm')  # 提醒领取奖品的弹窗
+        reward_notice_confirm = self.operation.analyse_pic_word('reward_notice_confirm', 1)
+        if "我知道了" in reward_notice_confirm:
+            print("存在奖品领取提醒")
+            return True
+        return False
+
+    def check_in_order_confirm_page(self):
+        """判断是否在中奖下单后的购买成功的页面"""
+        self.operation.get_screenshot(self.device_id)
+        self.cut_pic(370, 120, 700, 220, '', 'order_confirm')  # 提醒领取奖品的弹窗
+        order_confirm = self.operation.analyse_pic_word('order_confirm')
+        if "购买成功" in order_confirm:
+            print("福袋商品下单成功！")
+            return True
+        return False
+
+    def get_reward(self, reward_y=0):
+        """中奖后领奖然后返回"""
+        self.operation.save_reward_pic(self.device_id)
+        self.click(243, reward_y)  # 勾选协议
+        self.operation.delay(1)
+        self.click(540, reward_y - 140)  # 点击领取
+        print("勾选协议，点击领取奖品")
+        self.operation.delay(5)
+        self.click(886, 2170)  # 点击下单
+        print("点击下单")
+        self.operation.delay(10)
+        while self.check_in_order_confirm_page():
+            # self.click(80, 180)  # 点击回退按钮
+            self.operation.click_back(self.device_id)
+            print("点击回退按钮")
+            self.operation.delay(4)
+        print("下完单返回到直播间")
+        self.operation.delay(4)
+        if self.check_lucky_draw_result():
+            print("领奖弹窗未关闭，点击关闭弹窗")
+            self.click(540, reward_y + 180)
+            print("点击坐标位置:540 {}关闭领奖弹窗".format((reward_y + 180) * self.resolution_ratio_y // 2400))
+            self.operation.delay(2)
+        if self.check_have_reward_notice_confirm():
+            print("提醒领奖弹窗未关闭，点击我知道了，关闭弹窗")
+            self.click(540, 1400)  # 点击我知道了
+            self.operation.delay(2)
+        self.operation.delay(30)
+        print("关闭中奖提醒后等待30S")
+
+    def deal_battery_level(self):
+        """针对电量不足的情况做处理"""
+        while self.operation.get_ballery_level(self.device_id) < 30:
+            print("设备电量较低，退出到直播列表，等待电量恢复后继续挂机")
+            self.back_to_zhibo_list()
+            self.operation.delay(1800)  # 挂机30分钟
+
+    def check_stop_charging(self):
+        """针对vivo设备，判断长时间连接弹出停止充电的弹窗"""
+        self.cut_pic(225, 1951, 865, 2051, '', 'charging_stop_notice')
+        charging_stop_notice = self.operation.analyse_pic_word('charging_stop_notice')
+        if "充电" in charging_stop_notice:
+            print("设备弹出停止充电提醒！")
+            return True
+        return False
+
+    def fudai_choujiang(self, device_id="", needswitch=False, wait_minutes=15):
+        """福袋抽奖主逻辑，默认不切换直播间"""
+        def initialize():
+            """初始化参数"""
+            self.device_id = device_id
+            self.resolution_ratio_x, self.resolution_ratio_y = self.operation.get_device_resolution(self.device_id)
+            self.y_pianyi = self.find_y_offset()
+            return {
+                'wait_times': 0,  # 当前直播间的等待次数
+                'swipe_times': 0,  # 向上滑动的次数
+                'fudai_not_open_times': 0  # 无法打开福袋的次数
+            }
+
+        def handle_night_time(current_hour):
+            """处理凌晨时间段"""
+            if 2 <= current_hour <= 6:
+                self.back_to_zhibo_list()
+                print(f"已经凌晨{current_hour}点了，退出直播间回到直播列表，等待5个小时")
+                self.operation.delay(18000)
+                return True
+            return False
+
+        def handle_no_fudai_time():
+            """处理长时间无福袋的情况"""
+            if self.check_no_fudai_time() > 1800:  # 如果30分钟都没有福袋
+                self.operation.save_reward_pic(self.device_id)
+                self.back_to_zhibo_list()
+                self.into_zhibo_from_list()
+                return True
+            return False
+
+        def handle_fudai_click(x, stats):
+            """处理福袋点击"""
+            if x and stats['swipe_times'] < 17:
+                stats['wait_times'] = 0
+                self.click(x + 25, 430 + self.y_pianyi)
+                print("点击打开福袋详情")
+                self.operation.delay(3)
+                return True
+            return False
+
+        def handle_switch_live_room(stats):
+            """处理切换直播间的情况"""
+            if stats['swipe_times'] < 15 and self.operation.get_current_hour() > 6:
+                self.swipe(760, 1600, 760, 800, 200)
+                print("直播间无福袋，上划切换直播间")
+                stats['swipe_times'] += 1
+            else:
+                print("直播间刷了15个都无福袋，退出返回直播列表")
+                self.operation.click_back(self.device_id)
+                self.operation.delay(3)
+                if self.check_in_follow_list():
+                    self.click(390, 560)
+                    print("点击打开直播间列表")
+                self.into_zhibo_from_list()
+                stats['swipe_times'] = 0
+            self.operation.delay(5)
+            return True
+
+        def handle_closed_live_room(stats):
+            """处理直播间关闭的情况"""
+            if self.check_zhibo_is_closed():
+                self.back_to_zhibo_list()
+                self.into_zhibo_from_list()
+                stats['swipe_times'] = 0
+                self.operation.delay(5)
+                return True
+            return False
+
+        def handle_live_room_list(stats):
+            """处理直播间列表的情况"""
+            if self.check_in_zhibo_list():
+                self.into_zhibo_from_list()
+                stats['swipe_times'] = 0
+                return True
+            return False
+
+        def handle_wait_time(stats):
+            """处理等待时间的情况"""
+            if stats['wait_times'] >= 4:
+                if stats['swipe_times'] < 15:
+                    self.swipe(760, 1600, 760, 800, 200)
+                    print("直播间等待2分钟无福袋，上划切换直播间")
+                    stats['swipe_times'] += 1
+                else:
+                    print("直播间等待2分钟无福袋，退出返回直播列表")
+                    self.back_to_zhibo_list()
+                    self.into_zhibo_from_list()
+                    stats['swipe_times'] = 0
+                stats['wait_times'] = 0
+                self.operation.delay(5)
+                return True
+            return False
+
+        def get_fudai_info():
+            """获取福袋信息"""
+            self.operation.get_screenshot(self.device_id)
+            renwu = self.check_fudai_detail_height()
+            return self.get_fudai_contain(renwu)
+
+        def handle_fudai_content(x, stats, fudai_content_text, current_hour):
+            """处理福袋内容"""
+            if self.check_contain(fudai_content_text, current_hour):
+                self.click(x + 45, 430)
+                print("点击小福袋位置，关闭福袋详情")
+                self.operation.delay(1)
+                self.swipe(760, 1600, 760, 800, 200)
+                print("直播间福袋内容不理想，上划切换直播间")
+                stats['swipe_times'] += 1
+                self.operation.delay(5)
+                return True
+            return False
+
+        def handle_countdown(x, stats, time_text):
+            """处理倒计时"""
+            result = self.operation.check_countdown(time_text)
+            if result:
+                stats['fudai_not_open_times'] = 0
+                lastsecond, future_timestamp = result
+                return lastsecond, future_timestamp
+            # 如果第一次失败，重新获取信息再试一次
+            self.operation.delay(2)
+            self.operation.get_screenshot(self.device_id)
+            _, time_text = get_fudai_info()
+            result = self.operation.check_countdown(time_text)
+            if result:
+                stats['fudai_not_open_times'] = 0
+                lastsecond, future_timestamp = result
+                return lastsecond, future_timestamp
+            # 如果两次尝试都失败
+            stats['fudai_not_open_times'] += 1
+            self.click(x + 45, 430)
+            print(f"第{stats['fudai_not_open_times']}次打开福袋异常，点击小福袋旁边位置，关闭福袋详情")
+            if stats['fudai_not_open_times'] > 10:
+                print("超过10次点击福袋无法打开详情，等待30分钟")
+                self.operation.delay(1800)
+            self.operation.delay(2)
+            return None
+
+        def handle_lucky_draw(x):
+            """处理抽奖结果"""
+            # 检查抽奖结果
+            result = self.check_lucky_draw_result()
+            if result:
+                if result == 1:
+                    self.click(540, 1270)
+                    print("没有抽中，点击：我知道了，关闭弹窗")
+                    self.operation.delay(2)
+                    return True
+                elif result == 2:
+                    self.click(540, 1270)
+                    print("没有抽中但获得优惠券，点击：领取并使用，关闭弹窗")
+                    self.operation.delay(2)
+                    self.click(x, 400)
+                    print("点击小福袋偏上的位置，关闭店铺商品列表")
+                    self.operation.delay(1)
+                    return True
+                elif result == 3:  # 其他情况
+                    print("没有抽中但交互按钮未知，等待5秒后继续")
+                    self.operation.delay(5)
+                    return False
+                else:  # 中奖了
+                    print(f"抽中奖品，开始领取，奖品确认按钮y坐标为：{result}")
+                    self.get_reward(result)
+                    return True
+            return False
+
+        def handle_countdown_check(x, stats, lastsecond, needswitch, wait_minutes):
+            """处理倒计时检查"""
+            if lastsecond < 15 and needswitch:
+                self.click(x + 45, 430)
+                print("点击小福袋位置，关闭福袋详情")
+                self.operation.delay(1)
+                if needswitch:
+                    self.swipe(760, 1600, 760, 800, 200)
+                    print("抽奖倒计时时间小于15秒，不参与，上划切换直播间")
+                    stats['swipe_times'] += 1
+                self.operation.delay(5)
+                return True
+                
+            if needswitch and lastsecond >= 60 * wait_minutes:
+                self.click(x + 45, 430)
+                print(f"点击小福袋位置，关闭福袋详情")
+                self.operation.delay(1)
+                self.swipe(760, 1600, 760, 800, 200)
+                print(f"抽奖倒计时时间大于{wait_minutes}分钟，暂不参与，上划切换直播间")
+                stats['swipe_times'] += 1
+                self.operation.delay(5)
+                return True
+            return False
+
+        def handle_failed_participation(stats):
+            """处理参与失败的情况"""
+            self.swipe(760, 1600, 760, 800, 200)
+            print("参与抽奖失败，上划切换直播间")
+            stats['swipe_times'] += 1
+            self.operation.delay(5)
+
+        def handle_after_draw(x, stats, needswitch):
+            """处理抽奖后的情况"""
+            have_clicked_no_award = handle_lucky_draw(x)
+            if have_clicked_no_award:
+                if not needswitch:
+                    self.operation.random_delay(180, 420)
+                    return False
+                else:
+                    self.swipe(760, 1600, 760, 800, 200)
+                    print("完成本次抽奖，上划切换直播间")
+                    stats['swipe_times'] += 1
+                    self.operation.delay(5)
+                    return True
+            return False
+
+        # 主循环
+        stats = initialize()
+        while True:
+            self.deal_battery_level()
+            current_hour = self.operation.get_current_hour()
+            # 检查各种情况
+            if handle_night_time(current_hour):
+                continue
+            x = self.check_have_fudai()
+            if handle_no_fudai_time():
+                continue
+            # 处理福袋点击
+            if handle_fudai_click(x, stats):
+                # 获取福袋信息
+                fudai_content_text, time_text = get_fudai_info()
+            elif needswitch:
+                handle_switch_live_room(stats)
+                continue
+            elif handle_closed_live_room(stats):
+                continue
+            elif handle_live_room_list(stats):
+                continue
+            elif handle_wait_time(stats):
+                continue
+            else:
+                print("直播间暂无福袋，等待60S")
+                self.operation.delay(60)
+                continue
+                
+            # 处理福袋内容
+            if handle_fudai_content(x, stats, fudai_content_text, current_hour):
+                continue
+                
+            # 处理倒计时
+            countdown_result = handle_countdown(x, stats, time_text)
+            if countdown_result is None:
+                continue
+                
+            lastsecond, future_timestamp = countdown_result
+            
+            # 检查倒计时时间
+            if handle_countdown_check(x, stats, lastsecond, needswitch, wait_minutes):
+                continue
+                
+            # 参与抽奖
+            if not self.attend_choujiang():
+                handle_failed_participation(stats)
+                continue
+                
+            # 等待开奖
+            print(f"等待{lastsecond+5}秒后开奖")
+            self.operation.delay(lastsecond + 5)
+            
+            # 处理开奖结果和后续操作
+            if handle_after_draw(x, stats, needswitch):
+                continue
+            elif handle_closed_live_room(stats):
+                continue
+            elif handle_live_room_list(stats):
+                continue
+
+
+if __name__ == '__main__':
+    douyin = fudai_analyse()
+
+
+

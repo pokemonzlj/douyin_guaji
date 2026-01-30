@@ -237,5 +237,3 @@ class underlying_operations:
         """点击坐标位置"""
         os.system(
             "adb -s {} shell input tap {} {}".format(device_id, x, y))
-
-
