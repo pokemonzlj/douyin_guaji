@@ -17,6 +17,53 @@ pip install pillow paddlepaddle paddleocr numpy
 7.4.0版本开始，会自动识别偏移值，后续不再需要调整任何参数，全自动识别、运行  
 8.基本上大部分问题，都能从这篇文章找到答案和建议：https://www.bilibili.com/opus/1104972369516036117
 
+---
+
+## MaaFramework 版本（推荐）
+
+> 基于 [MaaFramework](https://github.com/MaaXYZ/MaaFramework) 重构，对应文件：  
+> `maa_controller.py` / `douyin_fudai_maa.py` / `douyin_guaji_maa.py`
+
+### MaaFramework 版 vs 原版对比
+
+| 对比项 | 原版（PaddleOCR + adb） | MaaFramework 版 |
+|--------|------------------------|-----------------|
+| OCR 引擎 | PaddleOCR + PaddlePaddle | PP-OCRv5 + ONNX Runtime |
+| OCR 速度 | ~1.8s/次 | ~1.1s/次（快约 40%） |
+| 安装体积 | PaddlePaddle 约 1GB+ | MaaFw 约 100MB |
+| 截图方式 | adb screencap + pull（落盘） | minicap 内存直传（更快） |
+| 点击/滑动 | adb input（偶发延迟） | maatouch（更稳定） |
+| 设备发现 | 手动填写 device_id | 自动扫描 ADB 设备 |
+| 像素检测 | 读 PNG 文件 | 直接操作 numpy 数组 |
+
+### MaaFramework 版安装步骤
+
+**① 安装依赖（替代 PaddleOCR）**
+```bash
+pip install MaaFw pillow numpy
+```
+> 不再需要安装 `paddlepaddle` 和 `paddleocr`
+
+**② 启动方式**
+```bash
+python douyin_guaji_maa.py
+```
+程序会自动扫描 ADB 设备，有多台时让你输入数字选择，无需手动填写设备 ID。
+
+**③ 调整 y 偏移（刘海屏/模拟器）**  
+打开 `douyin_guaji_maa.py` 最后一行，修改 `y_pianyi` 参数：
+```python
+choujiang.guaji(y_pianyi=0)   # 大多数手机填 0
+# 刘海屏/挖孔屏检测不到福袋时尝试：y_pianyi=30 / 50 / 80
+```
+
+**④ MuMu 模拟器专项配置**  
+1. 模拟器 → 设置 → ADB 调试 → 开启  
+2. 分辨率设置为 **1080 × 2400**，DPI 设置为 **440**  
+3. 程序启动后会自动通过 `127.0.0.1:16384` 连接
+
+---
+
 ## 分辨率说明（检测不到福袋必读）
 本脚本以 **1080 × 2400** 为基准分辨率开发，所有坐标和像素检测均按比例换算，支持其他分辨率手机。  
 运行后会通过 `adb shell wm size` 自动读取设备实际分辨率，无需手动填写。  
