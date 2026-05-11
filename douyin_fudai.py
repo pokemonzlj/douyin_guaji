@@ -285,9 +285,9 @@ class fudai_analyse:
             pix = pic_new.load()
             # 定义颜色范围
             color_ranges = {
-                'r': (193, 203),
+                'r': (183, 193),
                 'g': (172, 193),
-                'b': (235, 247)
+                'b': (237, 248)
             }
             # 检查每个x坐标
             for x in range(41, 410):
