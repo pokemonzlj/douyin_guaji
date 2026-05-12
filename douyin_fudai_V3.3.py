@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import atexit
 from PIL import Image
 from datetime import datetime
 from Underlying_Operations import underlying_operations
@@ -35,8 +36,9 @@ class fudai_analyse:
         self.resolution_ratio_x = 1080
         self.resolution_ratio_y = 2400
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
-        log_file = open(timepic + '.log', 'w')
+        log_file = open(timepic + '.log', 'w', encoding='utf-8')
         sys.stdout = Tee(sys.stdout, log_file)
+        atexit.register(log_file.close)  # Bug修复：保证程序退出时日志文件正常关闭
         self.last_find_fudai_time = 0.0
         self.last_refresh_zhibo_list_time = 0.0
         self.operation = underlying_operations()
@@ -56,7 +58,7 @@ class fudai_analyse:
     def deal_robot_pic_change_color(self):
         """处理人机验证的图片，转为黑白图"""
         self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
-        path = os.path.dirname(__file__) + '/pic/save'
+        path = os.path.dirname(os.path.abspath(__file__)) + '/pic/save'
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
         img = img.convert('RGB')
@@ -74,39 +76,43 @@ class fudai_analyse:
         img.save(save_pic)
 
     def check_robot_pic_distance(self):
-        """处理人机验证的图片"""
+        """处理人机验证的图片，计算需要滑动的距离"""
         self.cut_pic(143, 884, 936, 1380, '', 'robot_verification')
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.dirname(os.path.abspath(__file__)) + '/pic'
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
         img = img.convert('RGB')
         width, height = img.size
-        printed_first_result = False  # 用于记录第一个结果是否已经输出过
-        printed_second_result = False  # 用于记录第二个结果是否已经输出过
+        start_x, start_y = None, None  # Bug修复：防止 x/y 未定义时 NameError
+        # 找到第一个白色像素（滑块起点）
         for y in range(20, height - 30):
             for x in range(5, width - 40):
                 current_color = img.getpixel((x, y))
                 if current_color[0] > 240 and current_color[1] > 240 and current_color[2] > 240:
-                    if not printed_first_result:  # 确保只输出一次第一个结果
-                        print(x, y)
-                        printed_first_result = True
+                    print(x, y)
+                    start_x, start_y = x, y
                     break
-            if printed_first_result:  # 如果已经输出过第一个结果，则退出外层循环
+            if start_x is not None:
                 break
-        for x1 in range(x, width - 40):
-            current_color = img.getpixel((x1, y))
-            if current_color[0] < 50 and current_color[1] < 55 and current_color[2] < 85 and current_color[0] + \
-                    current_color[1] + current_color[2] < 150:
-                if not printed_second_result:  # 确保只输出一次第二个结果
-                    print(x1, y)
-                    printed_second_result = True
-                print("需要滑动的距离为{}".format(x1 - x))
-                return x1 - x
+        if start_x is None:
+            print("未找到滑块起始白色像素，无法计算距离")
+            return None
+        # 找到缺口（深色像素）
+        for x1 in range(start_x, width - 40):
+            current_color = img.getpixel((x1, start_y))
+            if (current_color[0] < 50 and current_color[1] < 55 and current_color[2] < 85
+                    and current_color[0] + current_color[1] + current_color[2] < 150):
+                print(x1, start_y)
+                distance = x1 - start_x
+                print("需要滑动的距离为{}".format(distance))
+                return distance
+        print("未找到缺口深色像素，无法计算距离")
+        return None
 
     def deal_robot_pic(self):
         """处理人机验证的图片"""
         self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
-        path = os.path.dirname(__file__) + '/pic/save'
+        path = os.path.dirname(os.path.abspath(__file__)) + '/pic/save'
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
         img = img.convert('RGB')
@@ -145,84 +151,40 @@ class fudai_analyse:
         img.save(save_pic)
 
     def check_detail_height(self):
-        """判定福袋弹窗的高度，会因为抽奖所需任务不同稍有区别,分别有不要任务、1/2个任务"""
-        path = os.path.dirname(__file__) + '/pic'
+        """判定福袋弹窗的高度，会因为抽奖所需任务不同稍有区别，分别有不要任务、1/2/3个任务"""
+        path = os.path.dirname(os.path.abspath(__file__)) + '/pic'
         pic1_path = path + '/screenshot.png'
         pic = Image.open(pic1_path)
-        # pic_new = Image.open(cut_pic_path)
         pic_new = pic.convert('RGBA')
         pix = pic_new.load()
-        if 30 <= pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400][0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400][1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400][2] <= 84:
-            print('参与抽奖有3个任务')
-            return 3
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-            0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                    1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                    2] <= 84:
-            print('参与抽奖有3个任务')
-            return 3
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-            0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-                    1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 883 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-                    2] <= 84:
-            print('参与抽奖有3个任务')
-            return 3
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400][0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400][1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400][2] <= 84:
-            print('参与抽奖有2个任务')
-            return 2
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-            0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                    1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                    2] <= 84:
-            print('参与抽奖有2个任务')
-            return 2
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-            0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-                    1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 983 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-                    2] <= 84:
-            print('参与抽奖有2个任务')
-            return 2
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400][0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400][1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400][2] <= 84:
-            print('参与抽奖有1个任务')
-            return 1
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-            0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                    1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400 + self.y_pianyi][
-                    2] <= 84:
-            print('参与抽奖有1个任务')
-            return 1
-        elif 30 <= pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-            0] <= 38 and 34 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-                    1] <= 40 and 78 <= \
-                pix[536 * self.resolution_ratio_x // 1080, 1058 * self.resolution_ratio_y // 2400 - self.y_pianyi][
-                    2] <= 84:
-            print('参与抽奖有1个任务')
-            return 1
-        elif self.check_have_robot_analyse():  # 如果打开的弹窗是个人机校验
+        rx = self.resolution_ratio_x
+        ry = self.resolution_ratio_y
+
+        def _is_task_color(px_x, px_y):
+            """判断该像素是否为任务标记的特定蓝色"""
+            c = pix[px_x, px_y]
+            return 30 <= c[0] <= 38 and 34 <= c[1] <= 40 and 78 <= c[2] <= 84
+
+        # 每种任务数检测3个 y 偏移变体（基准、+y_pianyi、-y_pianyi）
+        check_map = [
+            (3, 883), (2, 983), (1, 1058)
+        ]
+        for renwu, base_y in check_map:
+            for dy in [0, self.y_pianyi, -self.y_pianyi]:
+                px_x = 536 * rx // 1080
+                px_y = base_y * ry // 2400 + dy
+                if _is_task_color(px_x, px_y):
+                    print('参与抽奖有{}个任务'.format(renwu))
+                    return renwu
+
+        if self.check_have_robot_analyse():
             self.deal_robot_analyse()
         print('参与抽奖不需要任务')
         return 0
 
     def check_have_fudai(self):
         """判定直播页面福袋的小图标是否存在"""
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.dirname(os.path.abspath(__file__)) + '/pic'
         pic1_path = path + '/screenshot.png'
         loop = 0
         while loop < 6:  # 每3秒识别一次，最多等待18秒
@@ -432,7 +394,7 @@ class fudai_analyse:
     def check_zhibo_list_have_zhibo(self):
         """检查直播列表是否存在直播的内容"""
         self.operation.get_screenshot(self.device_id)
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.dirname(os.path.abspath(__file__)) + '/pic'
         pic1_path = path + '/screenshot.png'
         pic = Image.open(pic1_path)
         # pic_new = Image.open(cut_pic_path)
@@ -493,19 +455,19 @@ class fudai_analyse:
         return fudai_content_text, time_text
 
     def check_contain(self, contains=''):
-        """检查福袋内容是否是想要，从配置文件config中读取"""
+        """检查福袋内容是否是不想要的（返回 True=不想要，False=想要或无所谓）"""
         if 0 < self.operation.get_current_hour() < 7:
             print("凌晨不对福袋内容做要求")
-            return False
+            return False  # 凌晨不过滤，直接参与
         for contain in self.contains_want:
             if contain in contains:
-                print("福袋内容是想要的")
-                return False
+                print("福袋内容是想要的：{}".format(contain))
+                return False  # 想要的 → 不跳过
         for contain in self.contains_not_want:
             if contain in contains:
-                print("福袋内容不是想要的")
-                return True
-        print("福袋内容未明确是否想要")
+                print("福袋内容不是想要的：{}".format(contain))
+                return True  # 不想要的 → 跳过
+        print("福袋内容未明确是否想要，默认参与")
         return False
 
     def attend_choujiang(self):
@@ -742,7 +704,7 @@ class fudai_analyse:
                 continue
             else:  # 如果福袋不存在，且不需要切换直播间，且等待轮数不够
                 print("直播间暂无福袋，等待60S")
-                # wait_times += 1
+                wait_times += 1  # Bug修复：原代码此处被注释掉，wait_times 永不递增
                 self.operation.delay(60)
                 continue
             self.operation.get_screenshot(self.device_id)
@@ -822,7 +784,7 @@ class fudai_analyse:
                 else:  # 中奖流程（返回y坐标）
                     print("检测到中奖结果，执行领奖流程")
                     self.get_reward(check_result)
-                    continue
+                    break  # Bug修复：原为 continue，导致内层 while True 死循环；领完奖应 break 退出
             if have_clicked_no_award:  # 如果点击了没有中奖
                 if not needswitch:
                     self.operation.random_delay(180, 450)
