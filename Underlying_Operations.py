@@ -237,3 +237,63 @@ class underlying_operations:
         """点击坐标位置"""
         os.system(
             "adb -s {} shell input tap {} {}".format(device_id, x, y))
+
+    def input_text(self, device_id: str, text: str):
+        """输入文本"""
+        escaped_text = text.replace("  ", "%s")  # 处理空格
+        os.system(f"adb  -s {device_id} shell input text {escaped_text}")
+
+    def get_douyin_package_name(self, device_id):
+        """获取抖音app的包名"""
+        try:
+            # 运行 adb 命令查找包含 "aweme" 的包名
+            cmd = f'adb -s {device_id} shell pm list packages | findstr "aweme"'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            output = result.stdout
+            for line in output.splitlines():
+                if "aweme" in line:
+                    # 解析出包名
+                    return line.split(":")[1]
+        except Exception as e:
+            print(f"获取包名时出错: {e}")
+        return None
+
+    def get_douyin_activity_name(self, device_id, package_name):
+        try:
+            # 运行 adb 命令查找该包的活动信息（指定设备）
+            cmd = ['adb', '-s', device_id, 'shell', 'dumpsys', 'package', package_name, '|', 'findstr', '"activity"']
+            result = subprocess.run('  '.join(cmd), shell=True, capture_output=True, text=True)
+            output = result.stdout
+            for line in output.splitlines():
+                if "activity" in line and package_name in line:
+                    # 直接提取完整的 package/activity 格式
+                    return line.split()[1]
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] 获取活动名时出错: {e}")
+        return None
+
+    def start_douyin_app(self, device_id):
+        """启动抖音"""
+        try:
+            # 运行 adb 命令启动应用（指定设备）
+            package_name = self.get_douyin_package_name(device_id)
+            component = self.get_douyin_activity_name(device_id, package_name)
+            cmd = ['adb', '-s', device_id, 'shell', 'am', 'start', '-n', component]
+            subprocess.run(cmd)
+            print(f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] 已在设备 {device_id} 启动: {package_name}")
+            self.delay(3)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] 启动应用时出错: {e}")
+
+    def stop_douyin_app(self, device_id):
+        """强制关闭抖音"""
+        try:
+            package_name = self.get_douyin_package_name(device_id)
+            cmd = f'adb -s {device_id} shell am force-stop {package_name}'
+            subprocess.run(cmd)
+            print(f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] 已在设备 {device_id} 关闭: {package_name}")
+            self.delay(2)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] 关闭应用时出错: {e}")
+
+
