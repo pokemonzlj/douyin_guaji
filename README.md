@@ -19,7 +19,7 @@ pip install pillow paddlepaddle paddleocr numpy
 8.基本上大部分问题，都能从这篇文章找到答案和建议：https://www.bilibili.com/opus/1104972369516036117  
 
 ## 当前版本
-V4.2版本已发布，写了3.3的是3.3版本，没写的就是4.2  
+V4.2版本已发布，写了3.3的是V3.3的老版本，没写的就是V4.2，待V4.3发布会删除3.3  
 
 # 版本历史&预更新内容
     V1.0
