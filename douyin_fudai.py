@@ -8,8 +8,7 @@ from Underlying_Operations import underlying_operations
 import json
 
 """
-    当前版本
-    V4.2
+    当前版本 V4.3
     """
 
 class Tee(object):
@@ -32,36 +31,25 @@ class fudai_analyse:
     """福袋抽奖相关操作类"""
 
     def __init__(self):
-        self.device_id = 'XXXXXXXX'
-        self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
-        self.resolution_ratio_x = 1080
-        self.resolution_ratio_y = 2400
+        self.device_id = 'XXXXXXX'
+        self.y_pianyi = -50
+        self.resolution_ratio_x = 1440
+        self.resolution_ratio_y = 3200
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
         self.log_file = open(timepic + '.log', 'w')
         sys.stdout = Tee(sys.stdout, self.log_file)
         self.last_find_fudai_time = 0.0
         self.last_refresh_zhibo_list_time = 0.0
         self.operation = underlying_operations()
-        self.config_path = "config.json"
-        self.contains_not_want = []
-        self.contains_want = []
-        self.load_config()
+        # self.config_path = "config.json"
+        self.contains_not_want = self.operation.load_config("config.json", "contains_not_want")
+        self.contains_want = self.operation.load_config("config.json", "contains_want")
+        self.video_comments = self.operation.load_config("config.json", "video_comment")
+        self.device_offsets = self.operation.load_config("config.json", "device_offsets")
         self.current_page_type = 1
         self.page_name = {1: "直播间页", 2: "关注的正在直播列表页", 3: "个人中心关注页", 4: "订单支付完成页",
                           5: "首页-个人中心", 6: "首页-内容推荐", 7: "下单页"}
 
-    def __del__(self):
-        if hasattr(self, 'log_file'):
-            self.log_file.close()
-
-    def load_config(self):
-        """从配置文件中加载数据"""
-        if os.path.exists(self.config_path):
-            with open(self.config_path, "r", encoding="utf-8") as file:
-                config = json.load(file)
-                self.contains_not_want = config.get("contains_not_want", [])
-                self.contains_want = config.get("contains_want", [])
-                self.video_comments = config.get("video_comment", [])
 
     def deal_robot_pic_change_color(self):
         """处理人机验证的图片，转为黑白图"""
@@ -228,6 +216,9 @@ class fudai_analyse:
 
     def find_y_offset(self):
         """查找设备对应的偏移值"""
+        if self.device_id in self.device_offsets:
+            print("已记录过该设备偏移值为{}".format(self.device_offsets[self.device_id]))
+            return self.device_offsets[self.device_id]
         print("开始自动寻找合适的y轴偏移值...")
         test_offsets = range(0, 51, 2)  # 从0到50，步长为2
         self.operation.get_screenshot(self.device_id)
@@ -296,13 +287,13 @@ class fudai_analyse:
                 pix = pic_new.load()
                 # 颜色范围
                 color_ranges = {
-                    'r': (183, 193),
-                    'g': (172, 193),
+                    'r': (183, 194),
+                    'g': (165, 193),
                     'b': (237, 248)
                 }
                 # 检查每个x坐标
                 for base in [0, 126, 126 * 2, 126 * 3]:
-                    for x in range(41+base, 52+base):
+                    for x in range(34+base, 52+base):
                         x_pos = x * self.resolution_ratio_x // 1080
                         if self.y_pianyi != 0:
                             # 检查三种偏移值的情况
@@ -320,6 +311,9 @@ class fudai_analyse:
                                     print(f"找到福袋X坐标：{x}")
                                     if pic:
                                         pic.close()
+                                    if self.device_id not in self.device_offsets:
+                                        self.device_offsets[self.device_id]=y_offset
+                                        self.operation.update_config_with_offsets("config.json",{self.device_id:y_offset})
                                     return x
                         else:
                             y_pos = 403 * self.resolution_ratio_y // 2400
@@ -332,6 +326,9 @@ class fudai_analyse:
                                 print(f"找到福袋X坐标：{x}")
                                 if pic:
                                     pic.close()
+                                if self.device_id not in self.device_offsets:
+                                    self.device_offsets[self.device_id] = 0
+                                    self.operation.update_config_with_offsets("config.json", {self.device_id: 0})
                                 return x
             except Exception as e:
                 print(e)
@@ -586,6 +583,11 @@ class fudai_analyse:
         if "正在直播" in zhibo_list_title:
             print("当前界面已经在关注的直播间列表")
             return True
+        self.cut_pic(80, 290, 270, 380, '', 'zhibo_list_title')
+        zhibo_list_title = self.operation.analyse_pic_word('zhibo_list_title')
+        if "直播中" in zhibo_list_title:
+            print("当前界面已经在关注的直播间列表")
+            return True
         return False
 
     def check_zhibo_is_closed(self):
@@ -633,6 +635,9 @@ class fudai_analyse:
                     print("等待10分钟继续检查")
                     self.operation.delay(600)  # 等待10分钟继续检查
                 else:
+                    if self.device_id == "000002f4ad09ad6e":
+                        if self.check_stop_charging():
+                            self.operation.click(self.device_id, 540, 2153)
                     if self.reflash_zhibo():  # 刷新直播间列表
                         if current_hour > 7:  # 如果当前时间已经早上8点多了，一定有直播间了
                             self.click(290, 490)  # 点击第一个直播间
@@ -665,6 +670,9 @@ class fudai_analyse:
                 print("点击打开直播间的列表")
                 self.operation.delay(2)
             else:
+                if self.device_id == "000002f4ad09ad6e":
+                    if self.check_stop_charging():
+                        self.operation.click(self.device_id, 540, 2153)
                 print("当前页面不在直播间,等待10分钟后再检查")
                 self.operation.delay(600)  # 等待10分钟继续检查
 
@@ -803,6 +811,7 @@ class fudai_analyse:
             if "评论" in attend_button_text or "参与抽奖" in attend_button_text:
                 self.click(500, 2060)
                 print("点击参与抽奖")
+                self.operation.delay(2)
                 return True
             elif "开始观看" in attend_button_text:
                 self.click(500, 2060)
@@ -854,6 +863,14 @@ class fudai_analyse:
             # 处理参与按钮情况
             result = handle_participation_buttons()
             if result is not None:
+                # 第一次点击参与后，立即二次判定是否出现“开始观看”等需要第二次点击的状态
+                self.operation.get_screenshot(self.device_id)
+                self.cut_pic(306, 2030, 780, 2130, '', 'attend_button')
+                attend_button_text = self.operation.analyse_pic_word('attend_button', 1)
+                print(f"二次判定参与抽奖按钮文字内容：{attend_button_text}")
+                result_second = handle_participation_buttons()
+                if result_second is not None:
+                    return result_second
                 return result
                 
             # 处理状态按钮情况
@@ -1106,7 +1123,7 @@ class fudai_analyse:
             # 如果两次尝试都失败
             stats['fudai_not_open_times'] += 1
             self.click(x + 45, 470)
-            # print(f"第{stats['fudai_not_open_times']}次打开福袋异常，点击小福袋下方位置，关闭福袋详情")
+            print(f"第{stats['fudai_not_open_times']}次打开福袋异常，点击小福袋下方位置，关闭福袋详情")
             if stats['fudai_not_open_times'] > 10:
                 print("超过10次点击福袋无法打开详情，等待30分钟")
                 self.operation.delay(1800)
@@ -1121,7 +1138,13 @@ class fudai_analyse:
                 if result == 1:
                     self.click(540, 1270)
                     print("没有抽中，点击：我知道了，关闭弹窗")
-                    self.operation.delay(2)
+                    self.operation.delay(5)
+                    # 二次检验：5秒后再次判断弹窗是否仍存在，若存在则再次点击关闭
+                    second_check = self.check_lucky_draw_result()
+                    if second_check:
+                        self.click(540, 1270)
+                        print("二次点击：我知道了，关闭弹窗")
+                        self.operation.delay(2)
                     return True
                 elif result == 2:
                     self.click(540, 1270)
@@ -1251,6 +1274,8 @@ class fudai_analyse:
 
 if __name__ == '__main__':
     douyin = fudai_analyse()
+    douyin.check_have_fudai()
+
 
 
 

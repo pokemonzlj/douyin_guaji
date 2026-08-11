@@ -1,29 +1,42 @@
 {
     "contains_want": [
-        "鱼竿", "钓箱", "钓杆", 
-        "鱼漂盒", "钓竿","想要的"
+        "鱼竿",
+        "钓箱",
+        "钓杆",
+        "鱼漂盒",
+        "钓竿",
+        "想要的写这里"
     ],
     "contains_not_want": [
-        "店铺红包","窝米", "钓箱趣味贴纸", "鱼线", "钓鱼毛巾",
-        "钻石", "巨物钓线","不想要的"
+        "店铺红包",
+        "窝米",
+        "钓箱趣味贴纸",
+        "鱼线",
+        "钓鱼毛巾",
+        "钻石",
+        "巨物钓线",
+        "不想要的写这里"
     ],
-	"video_comment":[
-	"The video is amazing, liked and recommended!",
-	"Full of creativity, well-produced!",
-	"Deep and meaningful content, so talented!",
-	"Full of positive vibes, feeling great!",
-	"Smooth editing, so satisfying to watch!",
-	"Original masterpiece, worth watching!",
-	"The video and audio quality are flawless!",
-	"What a wonderful night, sharing this great video.",
-	"Keep sharing, and you'll gain more fans!",
-	"Life is more colorful because of you!",
-	"Happy and positive, thanks for sharing!",
-	"Discovering the beauty of life with heart!",
-	"I can't stop watching this!",
-	"You deserve more followers!",
-	"So talented - never stop!",
-	"Love the energy in this video!",
-	"This is so creative and well-made!"
-	]
+    "video_comment": [
+        "The video is amazing, liked and recommended!",
+        "Full of creativity, well-produced!",
+        "Deep and meaningful content, so talented!",
+        "Full of positive vibes, feeling great!",
+        "Smooth editing, so satisfying to watch!",
+        "Original masterpiece, worth watching!",
+        "The video and audio quality are flawless!",
+        "What a wonderful night, sharing this great video.",
+        "Keep sharing, and you'll gain more fans!",
+        "Life is more colorful because of you!",
+        "Happy and positive, thanks for sharing!",
+        "Discovering the beauty of life with heart!",
+        "I can't stop watching this!",
+        "You deserve more followers!",
+        "So talented - never stop!",
+        "Love the energy in this video!",
+        "This is so creative and well-made!"
+    ],
+    "device_offsets": {
+        "XXXXXXX": -50
+    }
 }

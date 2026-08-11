@@ -8,6 +8,7 @@ import numpy as np
 import logging
 import re
 import random
+import json
 
 class underlying_operations:
     """底层操作类"""
@@ -59,8 +60,8 @@ class underlying_operations:
             os.makedirs(path)
         try:
             subprocess.Popen(
-                'adb  -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % device_id).wait()  # -p: save the file as a png
-            subprocess.Popen('adb  -s %s pull /sdcard/DCIM/screenshot.png %s ' % (device_id, path),
+                'adb -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % device_id).wait()  # -p: save the file as a png
+            subprocess.Popen('adb -s %s pull /sdcard/DCIM/screenshot.png %s ' % (device_id, path),
                              stdout=subprocess.PIPE).wait()
             timetag = datetime.now().strftime('%H:%M:%S')
             print("{} 获取屏幕截图".format(timetag))
@@ -68,9 +69,9 @@ class underlying_operations:
         # subprocess.Popen('adb  -s %s shell rm /sdcard/DCIM/screenshot.png' % device_id).wait()
         except:
             subprocess.Popen(
-                'adb  -s %s shell screencap -p /sdcard/DCIM/screenshot1.png' % device_id).wait()
+                'adb -s %s shell screencap -p /sdcard/DCIM/screenshot1.png' % device_id).wait()
             subprocess.Popen(
-                'adb  -s %s shell mv /sdcard/DCIM/screenshot1.png /sdcard/DCIM/screenshot.png' % device_id).wait()
+                'adb -s %s shell mv /sdcard/DCIM/screenshot1.png /sdcard/DCIM/screenshot.png' % device_id).wait()
             self.get_screenshot(path)
 
     def get_current_hour(self):
@@ -128,12 +129,12 @@ class underlying_operations:
         path = os.path.dirname(__file__) + '/pic'
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         subprocess.Popen(
-            'adb  -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % (
+            'adb -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % (
                 device_id)).wait()  # 截图获奖的界面
         subprocess.Popen(
-            'adb  -s %s pull /sdcard/DCIM/screenshot.png %s/%s.png ' % (device_id, path, timepic),
+            'adb -s %s pull /sdcard/DCIM/screenshot.png %s/%s.png ' % (device_id, path, timepic),
             stdout=subprocess.PIPE).wait()
-        subprocess.Popen('adb  -s %s shell rm /sdcard/DCIM/screenshot.png' % device_id).wait()
+        subprocess.Popen('adb -s %s shell rm /sdcard/DCIM/screenshot.png' % device_id).wait()
         print("中奖了，点击领奖，保存中奖图片{}.png".format(timepic))
 
     def cut_pic(self, left_up=(0, 63), right_down=(1080, 1620), target='', name=''):
@@ -240,8 +241,11 @@ class underlying_operations:
 
     def input_text(self, device_id: str, text: str):
         """输入文本"""
-        escaped_text = text.replace("  ", "%s")  # 处理空格
-        os.system(f"adb  -s {device_id} shell input text {escaped_text}")
+        # escaped_text = text.replace("  ", "%s")  # 处理空格
+        try:
+            os.system(f"adb  -s {device_id} shell input text '{text}'")
+        except:
+            os.system(f"adb  -s {device_id} shell input text 'good!'")
 
     def get_douyin_package_name(self, device_id):
         """获取抖音app的包名"""
@@ -296,4 +300,44 @@ class underlying_operations:
         except Exception as e:
             print(f"[{datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}] 关闭应用时出错: {e}")
 
+    def __del__(self):
+        if hasattr(self, 'log_file'):
+            self.log_file.close()
+
+    def load_config(self, config_path="config.json", key="contains_want"):
+        """从配置文件中加载数据"""
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as file:
+                config = json.load(file)
+                return config.get(key, [])
+
+
+    def update_config_with_offsets(self, config_path="config.json", device_offsets=None):
+        """
+        更新设备偏移值到配置文件
+        仅新增未写入过的设备偏移值，不覆盖已存在的记录。
+        """
+        if device_offsets is None:
+            device_offsets = {}
+
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as file:
+                try:
+                    config = json.load(file)
+                except Exception:
+                    config = {}
+        else:
+            config = {}
+
+        existing_map = config.get('device_offsets', {})
+        # 仅合并未存在的条目
+        new_entries = {device_id: offset for device_id, offset in device_offsets.items() if device_id not in existing_map}
+        if not new_entries:
+            return False
+
+        existing_map.update(new_entries)
+        config['device_offsets'] = existing_map
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+        return True
 
