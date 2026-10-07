@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>抖音福袋万花筒</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="app-bar">
+    <div class="brand"><span class="brand-mark">抖</span><strong>抖音福袋万花筒</strong><span class="version">桌面版 3.1 · 真机引擎</span></div>
+    <div class="session-summary"><span id="login-state" class="status">检查登录状态</span><button id="open-data" class="quiet">数据目录</button></div>
+  </header>
+
+  <main class="workspace">
+    <section class="browser-panel">
+      <nav class="browser-bar">
+        <button id="back" class="icon-button" title="后退" aria-label="后退">‹</button>
+        <button id="forward" class="icon-button" title="前进" aria-label="前进">›</button>
+        <button id="reload" class="icon-button" title="刷新" aria-label="刷新">↻</button>
+        <input id="address" value="https://www.douyin.com/" aria-label="浏览器地址">
+        <button id="go">打开</button>
+        <button id="login-home">扫码登录</button>
+      </nav>
+      <div class="browser-frame">
+        <webview id="douyin" src="https://www.douyin.com/" partition="persist:douyin" allowpopups></webview>
+        <div id="browser-status" class="browser-status">正在加载抖音</div>
+        <div id="captcha-alert" class="captcha-alert">
+          <strong>检测到安全验证</strong>
+          <span>请在上方页面手动完成验证，然后点击“开始扫描”继续。</span>
+          <button id="close-captcha" class="quiet">知道了</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="control-panel">
+      <section class="panel-section account-section">
+        <div class="section-heading"><h2>账号</h2><button id="logout" class="quiet">退出登录</button></div>
+        <p id="account-detail">请在左侧抖音页面扫码登录。</p>
+      </section>
+
+      <section class="panel-section engine-section">
+        <div class="section-heading"><h2>挂机引擎（真机）</h2><span id="engine-state" class="status idle">未运行</span></div>
+        <p class="hint">抖音网页版已下线福袋功能，真正抓福袋必须用手机端。请在手机或模拟器上安装抖音、开启「USB 调试」，用数据线连到本电脑后点「刷新设备」。</p>
+        <label class="field">设备
+          <div class="inline-form">
+            <select id="engine-device"><option value="">自动选择</option></select>
+            <button id="refresh-devices">刷新设备</button>
+          </div>
+        </label>
+        <div class="primary-actions">
+          <button id="engine-start" class="primary">启动挂机</button>
+          <button id="engine-stop" disabled>停止挂机</button>
+        </div>
+        <p id="engine-detail" class="hint">尚未启动。挂机时会自动进入带福袋的直播间并参与。</p>
+      </section>
+
+      <section class="panel-section">
+        <div class="section-heading"><h2>网页扫描（实验）</h2><span id="run-state" class="status idle">未运行</span></div>
+        <div class="form-grid">
+          <label>每个直播间停留<input id="room-stay" type="number" min="8" max="120" value="18"><span>秒</span></label>
+          <label>最多待开奖<input id="max-pending" type="number" min="1" max="200" value="30"><span>个</span></label>
+        </div>
+        <label class="check-row"><input id="auto-follow" type="checkbox" checked>允许自动关注以完成参与条件</label>
+        <label class="check-row"><input id="allow-comment" type="checkbox">允许发送预设评论</label>
+        <label class="check-row"><input id="allow-diamond" type="checkbox">允许参与消耗钻石的福袋</label>
+        <div class="primary-actions"><button id="start" class="primary">开始扫描</button><button id="stop" disabled>停止</button></div>
+      </section>
+
+      <section class="panel-section">
+        <h2>代理</h2>
+        <div class="inline-form"><input id="proxy" placeholder="例如 http://127.0.0.1:7890"><button id="apply-proxy">应用</button></div>
+      </section>
+
+      <section class="panel-section log-section">
+        <div class="section-heading"><h2>运行日志</h2><button id="clear-log" class="quiet">清空</button></div>
+        <pre id="log"></pre>
+      </section>
+    </aside>
+
+    <section class="results-panel">
+      <div class="result-block pending-block">
+        <div class="section-heading"><h2>待开奖福袋</h2><span id="pending-count">0</span></div>
+        <div class="table-wrap"><table><thead><tr><th>直播间</th><th>奖品 / 条件</th><th>发现时间</th><th>状态</th></tr></thead><tbody id="pending-body"><tr class="empty"><td colspan="4">尚未发现福袋</td></tr></tbody></table></div>
+      </div>
+      <div class="result-block rooms-block">
+        <div class="section-heading"><h2>直播间队列</h2><span id="room-count">0</span></div>
+        <div class="table-wrap"><table><thead><tr><th>直播间地址</th><th>来源</th></tr></thead><tbody id="rooms-body"><tr class="empty"><td colspan="2">等待扫描</td></tr></tbody></table></div>
+      </div>
+    </section>
+  </main>
+  <script src="./renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+# ---------- 依赖 ----------
+node_modules/
+
+# ---------- 构建产物 ----------
+dist/
+dist_*/
+out/
+out_*/
+build/
+release/
+release_new/
+*.asar
+*.blockmap
+*.nsis.7z
+*.exe
+*.msi
+*.dmg
+*.AppImage
+
+# ---------- 打包中间件 ----------
+__pycache__/
+*.pyc
+*.pyo
+runtime-test/
+
+# ---------- Electron / Chromium 运行时缓存 ----------
+DawnCache/
+GPUCache/
+Code Cache/
+Cache/
+Local Storage/
+Session Storage/
+IndexedDB/
+
+# ---------- 引擎运行时目录 ----------
+pic/
+save/
+setting/
+down/
+log/
+data/
+log.txt
+*.log
+
+# ---------- 逆向过程产生的原始抓包数据 ----------
+tools/recon_report.json
+tools/fudai_found.json
+
+# ---------- 与本项目无关的旧版打包工具 ----------
+douyin_lottery_v10.2.0/
+
+# ---------- 编辑器 / 系统 ----------
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini

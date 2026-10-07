@@ -1,0 +1,46 @@
+{
+  "name": "douyin-guaji-desktop",
+  "version": "2.0.0",
+  "description": "基于内置浏览器会话的抖音福袋桌面工具",
+  "author": "pokemonzlj",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64",
+    "dist:portable": "electron-builder --win portable --x64",
+    "dist:dir": "electron-builder --win dir --x64"
+  },
+  "build": {
+    "appId": "com.pokemonzlj.douyinguaji",
+    "productName": "抖音福袋万花筒",
+    "directories": {
+      "output": "release"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "target_pic", "to": "assets/engine/target_pic" },
+      { "from": "config.json", "to": "assets/engine/config.json" },
+      { "from": "worker.py", "to": "assets/engine/worker.py" },
+      { "from": "douyin_fudai.py", "to": "assets/engine/douyin_fudai.py" },
+      { "from": "Underlying_Operations.py", "to": "assets/engine/Underlying_Operations.py" },
+      { "from": "douyin_guaji.py", "to": "assets/engine/douyin_guaji.py" }
+    ],
+    "win": {
+      "target": ["portable", "dir"],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "37.10.3",
+    "electron-builder": "^26.0.12"
+  }
+}
