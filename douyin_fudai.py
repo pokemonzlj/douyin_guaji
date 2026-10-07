@@ -7,6 +7,8 @@ from datetime import datetime
 from Underlying_Operations import underlying_operations
 import json
 
+RUNTIME_DIR = os.environ.get("DYFD_DATA_DIR", os.path.dirname(__file__))
+
 """
     当前版本 V4.3
     """
@@ -54,7 +56,7 @@ class fudai_analyse:
     def deal_robot_pic_change_color(self):
         """处理人机验证的图片，转为黑白图"""
         self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
-        path = os.path.dirname(__file__) + '/pic/save'
+        path = os.path.join(RUNTIME_DIR, 'pic', 'save')
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
         img = img.convert('RGB')
@@ -74,7 +76,7 @@ class fudai_analyse:
     def check_robot_pic_distance(self):
         """处理人机验证的图片"""
         self.cut_pic(143, 884, 936, 1380, '', 'robot_verification')
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.join(RUNTIME_DIR, 'pic')
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
         img = img.convert('RGB')
@@ -104,7 +106,7 @@ class fudai_analyse:
     def deal_robot_pic(self):
         """处理人机验证的图片"""
         self.cut_pic(143, 884, 936, 1380, 'save', 'robot_verification')
-        path = os.path.dirname(__file__) + '/pic/save'
+        path = os.path.join(RUNTIME_DIR, 'pic', 'save')
         pic = path + '/robot_verification.png'
         img = Image.open(pic)
         img = img.convert('RGB')
@@ -144,7 +146,7 @@ class fudai_analyse:
 
     def check_detail_height(self):
         """判定福袋弹窗的高度，会因为抽奖所需任务不同稍有区别,分别有不要任务、1/2/3个任务"""
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.join(RUNTIME_DIR, 'pic')
         pic1_path = path + '/screenshot.png'
         pic = Image.open(pic1_path)
         try:
@@ -273,7 +275,7 @@ class fudai_analyse:
         Returns:
             int or False: 如果找到福袋，返回x坐标；否则返回False
         """
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.join(RUNTIME_DIR, 'pic')
         pic_path = path + '/screenshot.png'
         max_loops = 5  # 最大循环次数
         check_interval = 1.5  # 检查间隔时间
@@ -679,7 +681,7 @@ class fudai_analyse:
     def check_zhibo_list_have_zhibo(self):
         """检查直播列表是否存在直播的内容"""
         self.operation.get_screenshot(self.device_id)
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.join(RUNTIME_DIR, 'pic')
         pic1_path = path + '/screenshot.png'
         pic = Image.open(pic1_path)
         try:

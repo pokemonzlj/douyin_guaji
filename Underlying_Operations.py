@@ -2,6 +2,7 @@ from paddleocr import PaddleOCR
 import subprocess
 from datetime import datetime, timedelta
 import os
+import shutil
 import time
 from PIL import Image, ImageFilter
 import numpy as np
@@ -10,22 +11,86 @@ import re
 import random
 import json
 
+RUNTIME_DIR = os.environ.get("DYFD_DATA_DIR", os.path.dirname(__file__))
+
+
+def ensure_adb_on_path():
+    """保证 adb 可被 subprocess 直接调用（Android SDK 的 platform-tools 默认不在 PATH 里）。"""
+    if shutil.which("adb"):
+        return shutil.which("adb")
+    candidates = []
+    for key in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        base = os.environ.get(key)
+        if base:
+            candidates.append(os.path.join(base, "platform-tools"))
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        candidates.append(os.path.join(local, "Android", "Sdk", "platform-tools"))
+    candidates += [
+        r"C:\Users\Administrator\AppData\Local\Android\Sdk\platform-tools",
+        os.path.join(RUNTIME_DIR, "platform-tools"),
+        os.path.join(RUNTIME_DIR, "adb"),
+        r"C:\Program Files\Nox\bin",
+        r"C:\Program Files (x86)\Nox\bin",
+    ]
+    for folder in candidates:
+        if not folder:
+            continue
+        for exe in ("adb.exe", "adb"):
+            path = os.path.join(folder, exe)
+            if os.path.exists(path):
+                os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
+                return path
+    return None
+
+
+ADB_PATH = ensure_adb_on_path()
+if ADB_PATH:
+    print("使用 adb: %s" % ADB_PATH)
+else:
+    print("未找到 adb，请安装 Android platform-tools 或把 adb 加入 PATH。")
+
+
+def create_ocr():
+    """创建 OCR 实例，兼容 PaddleOCR 2.x / 3.x。
+
+    3.x 默认会启用文档矫正（UVDoc）并走 oneDNN 加速，在 Windows + paddlepaddle 3.x
+    上会分别导致灰度图报错和 ConvertPirAttribute2RuntimeAttribute 崩溃，这里显式关闭。
+    """
+    attempts = [
+        dict(use_doc_orientation_classify=False, use_doc_unwarping=False,
+             use_textline_orientation=False, enable_mkldnn=False),
+        dict(use_doc_orientation_classify=False, use_doc_unwarping=False,
+             use_textline_orientation=False),
+        dict(use_angle_cls=False, show_log=False),
+        dict(),
+    ]
+    last_error = None
+    for kwargs in attempts:
+        try:
+            return PaddleOCR(**kwargs)
+        except Exception as exc:  # 参数不被当前版本支持时继续尝试
+            last_error = exc
+    raise last_error
+
+
 class underlying_operations:
     """底层操作类"""
     def __init__(self):
-        self.ocr = PaddleOCR()
+        self.ocr = create_ocr()
         logging.disable(logging.DEBUG)
         logging.disable(logging.WARNING)
 
-    def select_device(self):
-        """选择需要连接的设备"""
+    def select_device(self, device_id=None):
+        """选择需要连接的设备；可用 DYFD_DEVICE 指定，多设备时自动取第一个。"""
+        device_id = device_id or os.environ.get("DYFD_DEVICE")
+        if device_id:
+            return device_id
         string = subprocess.Popen('adb devices', shell=True, stdout=subprocess.PIPE)
         totalstring = string.stdout.read()
         totalstring = totalstring.decode('utf-8')
-        # print(totalstring)
         pattern = r'(\b(?:[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?::[0-9]+)?|[A-Za-z0-9]{8,})\b)\s*device\b'
         devicelist = re.findall(pattern, totalstring)
-        # devicelist = re.compile(r'(\w*)\s*device\b').findall(totalstring)
         devicenum = len(devicelist)
         if devicenum == 0:
             print("当前无设备连接电脑,请检查设备连接情况!")
@@ -34,28 +99,15 @@ class underlying_operations:
             print("当前有一台设备连接，编号:%s." % devicelist[0])
             return devicelist[0]
         else:
-            print("当前存在多台设备连接! 输入数字选择对应设备:")
-            dictdevice = {}
-            for i in range(devicenum):
-                string = subprocess.Popen("adb -s %s shell getprop ro.product.device" % devicelist[i], shell=True,
-                                          stdout=subprocess.PIPE)
-                modestring = string.stdout.read().strip()  # 去除掉自动生成的回车
-                print("%s:%s---%s" % (i + 1, devicelist[i], modestring))
-                dictdevice[i + 1] = devicelist[i]
-            num = input()
-            num = int(num)
-            while not num in dictdevice.keys():
-                print('输入不正确，请重新输入：')
-                num = input()
-                num = int(num)
-            return dictdevice[num]
+            print("当前存在多台设备连接，默认使用第一台：%s" % devicelist[0])
+            return devicelist[0]
 
     def get_screenshot(self, device_id, path='pic'):
         """截图3个adb命令需要2S左右的时间"""
         if path == 'pic':
-            path = os.path.dirname(__file__) + '/pic'
+            path = os.path.join(RUNTIME_DIR, 'pic')
         else:
-            path = os.path.dirname(__file__) + '/target_pic'
+            path = os.path.join(RUNTIME_DIR, 'target_pic')
         if not os.path.exists(path):
             os.makedirs(path)
         try:
@@ -126,7 +178,7 @@ class underlying_operations:
             return False
 
     def save_reward_pic(self, device_id):
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.join(RUNTIME_DIR, 'pic')
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         subprocess.Popen(
             'adb -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % (
@@ -140,7 +192,7 @@ class underlying_operations:
     def cut_pic(self, left_up=(0, 63), right_down=(1080, 1620), target='', name=''):
         '''裁剪图片，获取需要的区域小图片方便识别'''
         if target == '' or target == False:
-            path = os.path.dirname(__file__) + '/pic'
+            path = os.path.join(RUNTIME_DIR, 'pic')
             pic1_path = path + '/screenshot.png'
             pic = Image.open(pic1_path)
             if name == '':
@@ -149,7 +201,7 @@ class underlying_operations:
                 cut_pic_path = path + '/' + name + '.png'
             pic.crop((left_up[0], left_up[1], right_down[0], right_down[1])).save(cut_pic_path)
             return True
-        path_target = os.path.dirname(__file__) + '/pic/' + target
+        path_target = os.path.join(RUNTIME_DIR, 'pic', target)
         pic1_path = path_target + '/screenshot.png'
         pic = Image.open(pic1_path)
         if name == '':
@@ -160,7 +212,7 @@ class underlying_operations:
 
     def analyse_pic_word(self, picname='', change_color=0):
         """识别图像中的文字, change_color=1或2为不同的二值化模式，其他不做处理"""
-        path = os.path.dirname(__file__) + '/pic'
+        path = os.path.join(RUNTIME_DIR, 'pic')
         if picname == '':
             pic = path + '/cut.png'
         else:
@@ -171,22 +223,73 @@ class underlying_operations:
             img = img.point(lambda x: 0 if x < 128 else 255)  # 二值化
         elif change_color == 2:
             img = img.point(lambda x: 0 if x < 180 else 255)  # 二值化
-        # img.save(pic)
-        # img.show()
-        img_np = np.array(img)  # 将 Image 对象转换为 numpy 数组
-        result = self.ocr.ocr(img_np)
-        if result == [None]:
+        # PaddleOCR 3.x 的检测模型只接受 3 通道输入，灰度图会直接抛 IndexError
+        img_rgb = img.convert('RGB')
+        img_np = np.array(img_rgb)
+        return self.run_ocr(img_np)
+
+    def run_ocr(self, img_np):
+        """调用 OCR 并把不同版本的返回统一成一行字符串。"""
+        result = None
+        try:
+            result = self.ocr.predict(img_np)
+        except Exception:
+            try:
+                result = self.ocr.ocr(img_np)
+            except Exception as exc:
+                print("OCR 识别失败：%s" % exc)
+                return ''
+        if result is None:
             return ''
         return self.extract_ocr_content(result)
 
-    def extract_ocr_content(self, content=[]):
-        """对OCR识别到的内容进行取值和拼接，变成完整的一段内容"""
+    def extract_ocr_content(self, content=None):
+        """对OCR识别到的内容进行取值和拼接，变成完整的一段内容。
+
+        兼容 PaddleOCR 2.x（[ [box, (text, score)], ... ]）
+        与 3.x（[ {rec_texts: [...], rec_scores: [...]} ]）。
+        """
+        if not content:
+            return ''
+        texts = []
+
+        def walk(node):
+            if node is None:
+                return
+            if isinstance(node, dict):
+                rec = node.get('rec_texts')
+                if rec:
+                    texts.extend([str(t) for t in rec if t])
+                    return
+                for value in node.values():
+                    walk(value)
+                return
+            if isinstance(node, (list, tuple)):
+                # 2.x 的叶子节点：[位置, (识别内容, 置信度)]
+                if len(node) == 2 and isinstance(node[1], (list, tuple)) and node[1] and isinstance(node[1][0], str):
+                    texts.append(node[1][0])
+                    return
+                for item in node:
+                    walk(item)
+                return
+            if isinstance(node, str):
+                texts.append(node)
+
+        walk(content)
+        if texts:
+            return ''.join(texts)
+        # 老版本返回 [None] 表示没识别到
+        try:
+            return self.extract_ocr_content_legacy(content)
+        except Exception:
+            return ''
+
+    def extract_ocr_content_legacy(self, content=[]):
         ocr_result = content
         extracted_content = []
-        for item in ocr_result[0]:  # item 的结构为 [位置信息, (识别内容, 置信度)]
+        for item in ocr_result[0]:
             extracted_content.append(item[1][0])
         contains = ''.join(context for context in extracted_content if context)
-        # print(contain)
         return contains
 
     def delay(self, seconds=1):
