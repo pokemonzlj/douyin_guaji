@@ -60,18 +60,18 @@ class underlying_operations:
             os.makedirs(path)
         try:
             subprocess.Popen(
-                'adb -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % device_id).wait()  # -p: save the file as a png
+                'adb -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % device_id, shell=True).wait()  # -p: save the file as a png
             subprocess.Popen('adb -s %s pull /sdcard/DCIM/screenshot.png %s ' % (device_id, path),
-                             stdout=subprocess.PIPE).wait()
+                             stdout=subprocess.PIPE, shell=True).wait()
             timetag = datetime.now().strftime('%H:%M:%S')
             print("{} 获取屏幕截图".format(timetag))
             return True
         # subprocess.Popen('adb  -s %s shell rm /sdcard/DCIM/screenshot.png' % device_id).wait()
         except:
             subprocess.Popen(
-                'adb -s %s shell screencap -p /sdcard/DCIM/screenshot1.png' % device_id).wait()
+                'adb -s %s shell screencap -p /sdcard/DCIM/screenshot1.png' % device_id, shell=True).wait()
             subprocess.Popen(
-                'adb -s %s shell mv /sdcard/DCIM/screenshot1.png /sdcard/DCIM/screenshot.png' % device_id).wait()
+                'adb -s %s shell mv /sdcard/DCIM/screenshot1.png /sdcard/DCIM/screenshot.png' % device_id, shell=True).wait()
             self.get_screenshot(path)
 
     def get_current_hour(self):
@@ -130,11 +130,11 @@ class underlying_operations:
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         subprocess.Popen(
             'adb -s %s shell screencap -p /sdcard/DCIM/screenshot.png' % (
-                device_id)).wait()  # 截图获奖的界面
+                device_id), shell=True).wait()  # 截图获奖的界面
         subprocess.Popen(
             'adb -s %s pull /sdcard/DCIM/screenshot.png %s/%s.png ' % (device_id, path, timepic),
-            stdout=subprocess.PIPE).wait()
-        subprocess.Popen('adb -s %s shell rm /sdcard/DCIM/screenshot.png' % device_id).wait()
+            stdout=subprocess.PIPE, shell=True).wait()
+        subprocess.Popen('adb -s %s shell rm /sdcard/DCIM/screenshot.png' % device_id, shell=True).wait()
         print("中奖了，点击领奖，保存中奖图片{}.png".format(timepic))
 
     def cut_pic(self, left_up=(0, 63), right_down=(1080, 1620), target='', name=''):

@@ -1,10 +1,12 @@
 {
     "contains_want": [
         "鱼竿",
-        "钓箱",
         "钓杆",
-        "鱼漂盒",
-        "钓竿",
+        "钓箱",
+        "鱼漂",
+        "鱼饵",
+        "鱼护",
+        "鱼伞",
         "想要的写这里"
     ],
     "contains_not_want": [
@@ -37,6 +39,7 @@
         "This is so creative and well-made!"
     ],
     "device_offsets": {
-        "XXXXXXX": -50
+        "XXXXXXX": -50,
+        "C7Y6R19918007123": 0
     }
 }

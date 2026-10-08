@@ -1,0 +1,28 @@
+# douyin_guaji 运行环境依赖
+# 已在本机 n4050（Intel i5-2430M，Sandy Bridge，无 AVX2 / FMA）上验证可正常运行。
+#
+# 关键约束（踩坑总结）：
+#   1) Python 必须固定为 3.9！本仓库已用 .python-version 锁定 3.9，
+#      pyenv / uv / python-launcher 会据此自动选择；请务必用 3.9 创建虚拟环境：
+#        pyenv local 3.9   # 或确保 python3.9 可用
+#        python3.9 -m venv .venv
+#      paddlepaddle 2.6.1 + numpy 1.26.4 在 3.9 上最稳，3.10+ 未经验证。
+#   2) paddlepaddle 必须从官方 CPU 源安装。很多 PyPI 镜像(如 aliyun)没有 2.6.1，
+#      直接从默认源会装到 2.6.2 / 3.x，而 3.x 在缺少 AVX2 的 CPU 上会直接 SIGILL 崩溃。
+#   3) numpy 必须锁在 1.26.4。numpy 2.x 与 paddle / cv2 的 ABI 不兼容，会导致
+#      import cv2 / import paddle 失败(RuntimeError: module compiled against ABI ...)。
+#
+# 安装方式：
+#   python3.9 -m venv .venv
+#   source .venv/bin/activate        # Windows 用 .venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# 说明：opencv-python / opencv-contrib-python 由 paddleocr 自动拉取(<=4.6.0.66)，无需手动声明。
+
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cpu/
+
+paddlepaddle==2.6.1
+paddleocr==2.7.3
+numpy==1.26.4
+pillow==11.3.0
+setuptools==82.0.1
