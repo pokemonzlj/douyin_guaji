@@ -8,7 +8,8 @@ from Underlying_Operations import underlying_operations
 import json
 
 """
-    当前版本 V4.3
+    当前版本
+    V4.4
     """
 
 class Tee(object):
@@ -31,12 +32,12 @@ class fudai_analyse:
     """福袋抽奖相关操作类"""
 
     def __init__(self):
-        self.device_id = 'XXXXXXX'
-        self.y_pianyi = -50
-        self.resolution_ratio_x = 1440
-        self.resolution_ratio_y = 3200
+        self.device_id = 'xxxxxxxx'
+        self.y_pianyi = 0  # 应用于不同型号手机，图标相对屏幕的高度位置有偏差
+        self.resolution_ratio_x = 1080
+        self.resolution_ratio_y = 2400
         timepic = datetime.now().strftime('%Y-%m-%d-%H-%M')
-        self.log_file = open(timepic + '.log', 'w')
+        self.log_file = open(timepic + '.log', 'w', encoding='utf-8')
         sys.stdout = Tee(sys.stdout, self.log_file)
         self.last_find_fudai_time = 0.0
         self.last_refresh_zhibo_list_time = 0.0
@@ -142,77 +143,70 @@ class fudai_analyse:
         save_pic = path + '/robot_verification_new.png'
         img.save(save_pic)
 
-    def check_detail_height(self):
-        """判定福袋弹窗的高度，会因为抽奖所需任务不同稍有区别,分别有不要任务、1/2/3个任务"""
+    def find_fudai_detail_top_y(self):
+        """找到福袋详情顶部y轴的值"""
+        y_range = (1700, 800)
+        x = 30
         path = os.path.dirname(__file__) + '/pic'
-        pic1_path = path + '/screenshot.png'
-        pic = Image.open(pic1_path)
+        pic_path = path + '/screenshot.png'
         try:
-            pic_new = pic.convert('RGBA')
-            pix = pic_new.load()
-            # 定义任务位置和对应的任务数量
-            task_positions = [
-                (883, 3),  # 3个任务的位置
-                (983, 2),  # 2个任务的位置
-                (1058, 1)  # 1个任务的位置
-            ]
-            # 检查颜色是否匹配
-            def check_color(x, y):
-                return (30 <= pix[x, y][0] <= 38 and
-                       34 <= pix[x, y][1] <= 40 and
-                       78 <= pix[x, y][2] <= 84)
-            # 检查指定位置的任务
-            def check_task_position(base_y, task_count):
-                x = 536 * self.resolution_ratio_x // 1080
-                y = base_y * self.resolution_ratio_y // 2400
+            img = Image.open(pic_path)
+            img_rgba = img.convert('RGBA')
+            pix = img_rgba.load()
+            # 参考分辨率坐标到实际像素坐标的换算
+            x_pix = x * self.resolution_ratio_x // 1080
+            start_y, end_y = y_range
+            step = -5 if start_y > end_y else 5
+            # 初始化第一个像素作为参考
+            y_prev = start_y
+            y_prev_pix = y_prev * self.resolution_ratio_y // 2400
+            r_prev, g_prev, b_prev, _ = pix[x_pix, y_prev_pix]
+            last_match_y = y_prev
+            # 从起始y向终止y遍历（不包含终止边界超出）
+            y = y_prev + step
+            while (step < 0 and y >= end_y) or (step > 0 and y <= end_y):
+                y_pix = y * self.resolution_ratio_y // 2400
+                r, g, b, _ = pix[x_pix, y_pix]
 
-                # 检查三种偏移值的情况
-                for offset in [0, self.y_pianyi, -self.y_pianyi]:
-                    y_offset = (base_y + offset) * self.resolution_ratio_y // 2400
-                    if check_color(x, y_offset):
-                        print(f'参与抽奖有{task_count}个任务')
-                        return task_count
-                return None
-            # 检查所有任务位置
-            for base_y, task_count in task_positions:
-                result = check_task_position(base_y, task_count)
-                if result is not None:
-                    return result
-            # 检查是否是人机验证
-            if self.check_have_robot_analyse():
-                self.deal_robot_analyse()
-            print('参与抽奖不需要任务')
-            return 0
+                if abs(r - r_prev) <= 5 and abs(g - g_prev) <= 5 and abs(b - b_prev) <= 5:
+                    last_match_y = y
+                    # 更新上一像素作为新的比较基准
+                    r_prev, g_prev, b_prev = r, g, b
+                    y_prev = y
+                else:
+                    # 第一次出现不符合条件，返回最后一个符合条件的y
+                    # print(f"找到福袋详情顶部纵坐标：{last_match_y}")
+                    # 二次验证last_match_y是否有效
+                    while last_match_y <= start_y:
+                        y_verify_pix = last_match_y * self.resolution_ratio_y // 2400
+                        x_verify_pix = 90 * self.resolution_ratio_x // 1080
+                        try:
+                            # 重新获取当前last_match_y位置的像素RGB值
+                            r_current, g_current, b_current, _ = pix[x_pix, y_verify_pix]
+                            # 重新获取(90, last_match_y)位置的像素RGB值
+                            r_verify, g_verify, b_verify, _ = pix[x_verify_pix, y_verify_pix]
+                            if (abs(r_verify - r_current) <= 2 and 
+                                abs(g_verify - g_current) <= 2 and 
+                                abs(b_verify - b_current) <= 2):
+                                print(f"找到最终福袋详情顶部纵坐标：{last_match_y}")
+                                return last_match_y
+                        except IndexError:
+                            # 如果坐标超出图像范围，跳出循环
+                            break
+                        last_match_y += 5
+                        # print(f"验证失败，调整last_match_y到：{last_match_y}")
+                    return last_match_y
+                y += step
+            print(f"扫描完成，最终福袋详情顶部纵坐标：{last_match_y}")
+            return last_match_y
+        except Exception as e:
+            print(e)
+            return None
         finally:
-            pic.close()
-
-    def check_fudai_detail_height(self):
-        """判定福袋弹窗的高度，会因为抽奖所需任务不同稍有区别,分别有不要任务、1/2/3个任务"""
-        task_positions = [
-            (1100, 1),  # 1个任务的位置-商品描述1行
-            (1060, 2),  # 1个任务的位置-商品描述2行,当做2个任务
-            (1030, 2),  # 2个任务的位置
-            (935, 3)  # 3个任务的位置
-        ]
-
-        def check_super_fudai(base_y, task_count):
-            self.cut_pic(405, base_y, 670, base_y+90, '', 'super_fudai')
-            super_fudai = self.operation.analyse_pic_word('super_fudai')
-            if "超级福袋" in super_fudai:
-                print(f'参与抽奖有{task_count}个任务')
-                return task_count
-
-        for base_y, task_count in task_positions:
-            for offset in [0, self.y_pianyi, -self.y_pianyi]:
-                base_y += offset
-                result = check_super_fudai(base_y, task_count)
-                if result is not None:
-                    return result
-        # 检查是否是人机验证
-        if self.check_have_robot_analyse():
-            self.deal_robot_analyse()
-        print('参与抽奖不需要任务')
-        return 0
+            try:
+                img.close()
+            except Exception:
+                pass
 
     def find_y_offset(self):
         """查找设备对应的偏移值"""
@@ -287,13 +281,13 @@ class fudai_analyse:
                 pix = pic_new.load()
                 # 颜色范围
                 color_ranges = {
-                    'r': (183, 194),
-                    'g': (165, 193),
+                    'r': (183, 193),
+                    'g': (172, 193),
                     'b': (237, 248)
                 }
                 # 检查每个x坐标
                 for base in [0, 126, 126 * 2, 126 * 3]:
-                    for x in range(34+base, 52+base):
+                    for x in range(33+base, 52+base):
                         x_pos = x * self.resolution_ratio_x // 1080
                         if self.y_pianyi != 0:
                             # 检查三种偏移值的情况
@@ -722,41 +716,18 @@ class fudai_analyse:
             return wait_time
         return 0
 
-    def get_fudai_contain(self, renwu=2):
-        """获取福袋的内容和倒计时
-        Returns:
-            tuple: (fudai_content_text, time_text)
-        """
-        # 定义不同任务数量对应的截图参数
-        task_params = {
-            1: {'content': (390, 1300, 1000, 1520), 'countdown': (390, 1190, 690, 1300)},
-            2: {'content': (390, 1240, 1000, 1460), 'countdown': (390, 1110, 690, 1220)},
-            3: {'content': (390, 1160, 1000, 1380), 'countdown': (390, 1010, 690, 1120)},
-            0: {'content': (390, 1600, 1000, 1820), 'countdown': (390, 1460, 690, 1570)}
-        }
-        
-        # 获取对应任务数量的参数
-        params = task_params.get(renwu, task_params[2])  # 默认使用2个任务的参数
-        
-        # 截取福袋内容
-        content_params = params['content']
-        self.cut_pic(content_params[0], content_params[1] + self.y_pianyi, 
-                    content_params[2], content_params[3] + self.y_pianyi, 
-                    '', 'fudai_content')
-        
-        # 截取倒计时
-        countdown_params = params['countdown']
-        self.cut_pic(countdown_params[0], countdown_params[1] + self.y_pianyi,
-                    countdown_params[2], countdown_params[3] + self.y_pianyi,
-                    '', 'fudai_countdown')
-        
-        # 识别文本
+    def get_fudai_contain_and_countdown(self, top_y=1000):
+        """截取福袋的内容和倒计时，并识别内容"""
+        self.cut_pic(390, top_y + 265,
+                     1010, top_y + 475,
+                     '', 'fudai_content')
+        self.cut_pic(690, top_y + 0,
+                     970, top_y + 240,
+                     '', 'fudai_countdown')
         fudai_content_text = self.operation.analyse_pic_word('fudai_content', 1)
         time_text = self.operation.analyse_pic_word('fudai_countdown', 2)
-        
         print(f"福袋内容：{fudai_content_text}")
         print(f"倒计时时间：{time_text}")
-        
         return fudai_content_text, time_text
 
     def check_contain(self, contains='', current_hour=None):
@@ -1087,8 +1058,8 @@ class fudai_analyse:
         def get_fudai_info():
             """获取福袋信息"""
             self.operation.get_screenshot(self.device_id)
-            renwu = self.check_fudai_detail_height()
-            return self.get_fudai_contain(renwu)
+            y_top = self.find_fudai_detail_top_y()
+            return self.get_fudai_contain_and_countdown(y_top)
 
         def handle_fudai_content(x, stats, fudai_content_text, current_hour):
             """处理福袋内容"""
@@ -1238,11 +1209,9 @@ class fudai_analyse:
                 print("直播间暂无福袋，等待60S")
                 self.operation.delay(60)
                 continue
-                
             # 处理福袋内容
             if handle_fudai_content(x, stats, fudai_content_text, current_hour):
                 continue
-                
             # 处理倒计时
             countdown_result = handle_countdown(x, stats, time_text)
             if countdown_result is None:
@@ -1274,7 +1243,7 @@ class fudai_analyse:
 
 if __name__ == '__main__':
     douyin = fudai_analyse()
-    douyin.check_have_fudai()
+
 
 
 
